@@ -24,10 +24,13 @@ from typing import Dict, List, Optional, Tuple
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 OUTPUT_DIR = BASE_DIR / "output"
+FRONTEND_DIST_DIR = BASE_DIR / "frontend" / "dist"
 
 
 SITE_DIRECTORIES: Dict[str, Path] = {
@@ -582,8 +585,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+if FRONTEND_DIST_DIR.exists():
+    app.mount(
+        "/",
+        StaticFiles(directory=FRONTEND_DIST_DIR, html=True),
+        name="dashboard",
+    )
 
-@app.get("/", include_in_schema=False)
+    INDEX_FILE = FRONTEND_DIST_DIR / "index.html"
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_frontend(full_path: str) -> Response:
+        """Serve the single page application for non-API routes."""
+
+        if full_path.startswith("api") or not INDEX_FILE.exists():
+            raise HTTPException(status_code=404)
+
+        return FileResponse(INDEX_FILE)
+
+
+@app.get("/api/health", include_in_schema=False)
 def healthcheck() -> Dict[str, str]:
     """Provide a friendly landing response for platform health checks."""
 
@@ -592,6 +613,7 @@ def healthcheck() -> Dict[str, str]:
         "message": "MLB DFS Dashboard API is running.",
         "docs": "/docs",
         "sites": "/api/dashboard/sites",
+        "dashboard": "/",
     }
 
 
