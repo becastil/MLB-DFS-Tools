@@ -204,7 +204,7 @@ The `src/pipeline` package implements an end-to-end workflow for building DraftK
 1. **Download the DraftKings export.** On the DK lineup page, click *Export to CSV* and save it as `dk_data/player_ids.csv`.
 2. **Generate projections/ownership.** Use the projection CLI with the slate date (YYYY-MM-DD). Example for April 1st, 2025:
    ```bash
-   python -m pipeline.cli project \n       --slate dk_data/player_ids.csv \n       --date 2025-04-01 \n       --data-dir pipeline_artifacts \n       --output output/projections.csv \n       --template-output output/dk_template.csv
+   python -m pipeline.cli project --slate dk_data/player_ids.csv --date 2025-04-01 --data-dir pipeline_artifacts --output output/projections.csv --template-output output/dk_template.csv
    ```
    - `output/projections.csv` keeps the full model output for debugging.
    - `output/dk_template.csv` matches the public DK template and can be uploaded directly into third-party sim/optimizer tools online.
