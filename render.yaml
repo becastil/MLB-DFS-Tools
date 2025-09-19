@@ -5,6 +5,13 @@ services:
     buildCommand: |
       pip install -r requirements.txt
       cd frontend && npm install && npm run build
+      if [ ! -f frontend/dist/index.html ]; then
+        echo "ERROR: Frontend build failed - dist/index.html not found"
+        ls -la frontend/dist/ || echo "dist directory does not exist"
+        exit 1
+      fi
+      echo "✓ Frontend build successful - dist/index.html exists"
+      ls -la frontend/dist/
     startCommand: uvicorn src.dashboard_api:app --host 0.0.0.0 --port 10000
     envVars:
       - key: PYTHONPATH

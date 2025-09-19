@@ -15,6 +15,7 @@ Run with::
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -26,6 +27,10 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -588,22 +593,40 @@ app.add_middleware(
 )
 
 if FRONTEND_DIST_DIR.exists():
-    app.mount(
-        "/",
-        StaticFiles(directory=FRONTEND_DIST_DIR, html=True),
-        name="dashboard",
-    )
-
     INDEX_FILE = FRONTEND_DIST_DIR / "index.html"
+    if INDEX_FILE.exists():
+        logger.info(f"✓ Frontend bundle found at {FRONTEND_DIST_DIR}")
+        logger.info(f"✓ Mounting React SPA at / with index file: {INDEX_FILE}")
+        app.mount(
+            "/",
+            StaticFiles(directory=FRONTEND_DIST_DIR, html=True),
+            name="dashboard",
+        )
 
-    @app.get("/{full_path:path}", include_in_schema=False)
-    async def serve_frontend(full_path: str) -> Response:
-        """Serve the single page application for non-API routes."""
+        @app.get("/{full_path:path}", include_in_schema=False)
+        async def serve_frontend(full_path: str) -> Response:
+            """Serve the single page application for non-API routes."""
 
-        if full_path.startswith("api") or not INDEX_FILE.exists():
-            raise HTTPException(status_code=404)
+            if full_path.startswith("api") or not INDEX_FILE.exists():
+                raise HTTPException(status_code=404)
 
-        return FileResponse(INDEX_FILE)
+            return FileResponse(INDEX_FILE)
+    else:
+        logger.error(f"✗ Frontend dist directory exists but index.html missing: {INDEX_FILE}")
+else:
+    logger.error(f"✗ Frontend dist directory not found: {FRONTEND_DIST_DIR}")
+    logger.error("  The React dashboard will not be served - only API endpoints available")
+    
+    @app.get("/", include_in_schema=False)
+    async def missing_frontend() -> Dict[str, str]:
+        """Provide helpful message when frontend bundle is missing."""
+        return {
+            "error": "Frontend bundle not available",
+            "message": "The React dashboard is not available. Only API endpoints are accessible.",
+            "api_docs": "/docs",
+            "health_check": "/api/health",
+            "available_sites": "/api/dashboard/sites"
+        }
 
 
 @app.get("/api/health", include_in_schema=False)
