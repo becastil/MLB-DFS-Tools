@@ -2,3 +2,5 @@
 *
 # Except this file
 !.gitignore
+# Allow committed representative projection data
+!projections.csv
