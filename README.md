@@ -181,6 +181,7 @@ The `src/pipeline` package implements an end-to-end workflow for building DraftK
    ```bash
    python -m pipeline.cli project --slate dk_data/player_ids.csv --date 2025-04-01 --output output/projections.csv
    ```
+   Add `--template-output output/template.csv` if you need a CSV shaped like `Projection_Template_MLB (5).csv` for easy uploads to online optimizers.
 
 ### Data flow overview
 

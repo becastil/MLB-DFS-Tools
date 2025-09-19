@@ -45,6 +45,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("output/projections.csv"),
         help="Destination CSV for projections.",
     )
+    project_parser.add_argument(
+        "--template-output",
+        type=Path,
+        help="Optional path for a projection CSV formatted like the projection template.",
+    )
 
     return parser
 
@@ -64,8 +69,13 @@ def main(argv: list[str] | None = None) -> None:
             )
     elif args.command == "project":
         pipeline.build_training_corpus(force_refresh=False)
-        output = pipeline.generate_projections(args.slate, args.date, args.output)
-        print(f"Wrote {len(output)} player projections to {args.output}")
+        output, template_df = pipeline.generate_projections(
+            args.slate, args.date, args.output, args.template_output
+        )
+        if args.output:
+            print(f"Wrote {len(output)} player projections to {args.output}")
+        if args.template_output:
+            print(f"Wrote template-formatted projections to {args.template_output}")
     else:
         parser.error("Unknown command")
 

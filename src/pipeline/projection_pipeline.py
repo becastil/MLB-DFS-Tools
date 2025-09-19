@@ -34,6 +34,11 @@ class ProjectionResult:
     is_home: bool
     vegas_total: Optional[float]
     vegas_line: Optional[float]
+    dk_id: Optional[int] = None
+    row_id: Optional[str] = None
+    game_info: Optional[str] = None
+    avg_fpts: Optional[float] = None
+    lineup_status: Optional[str] = None
 
 
 class ProjectionPipeline:
@@ -120,7 +125,8 @@ class ProjectionPipeline:
         slate_csv: Path | str,
         slate_date: date,
         output_csv: Optional[Path | str] = None,
-    ) -> pd.DataFrame:
+        template_csv: Optional[Path | str] = None,
+    ) -> tuple[pd.DataFrame, Optional[pd.DataFrame]]:
         features_hitters, features_pitchers = self._load_feature_tables()
         hitter_store = self._latest_feature_store(features_hitters)
         pitcher_store = self._latest_feature_store(features_pitchers)
@@ -133,7 +139,7 @@ class ProjectionPipeline:
         slate = DraftKingsSlateLoader(slate_csv).load()
         lineups = self.rotowire_fetcher.fetch(slate_date)
         lineups["normalized_name"] = lineups["player_name"].map(self._normalize_name)
-        lineup_lookup = lineups.set_index("normalized_name") if not lineups.empty else pd.DataFrame()
+        lineup_lookup = self._build_lineup_lookup(lineups)
 
         vegas_by_team = self._build_team_context(lineups)
 
@@ -141,7 +147,7 @@ class ProjectionPipeline:
 
         for _, player in slate.iterrows():
             normalized = player["normalized_name"]
-            lineup_row = lineup_lookup.loc[normalized] if normalized in lineup_lookup.index else None
+            lineup_row = self._select_lineup_row(lineup_lookup, normalized)
             context = self._context_from_sources(player, lineup_row, vegas_by_team, slate_date)
 
             if self._is_pitcher(player.get("positions")):
@@ -157,33 +163,183 @@ class ProjectionPipeline:
                 projection = self.modeler.predict(models["hitters"], feature_row)[0]
                 model_type = "hitter"
 
+            salary = player.get("salary")
+            salary_value = float(salary) if not pd.isna(salary) else None
+
+            dk_identifier = player.get("dk_id")
+            if pd.isna(dk_identifier):
+                dk_identifier = None
+            else:
+                dk_identifier = int(dk_identifier)
+
+            row_identifier = player.get("row_id")
+            if pd.isna(row_identifier):
+                row_identifier = None
+            else:
+                row_identifier = str(row_identifier)
+
+            avg_fpts = player.get("avg_fpts")
+            avg_fpts_value = float(avg_fpts) if not pd.isna(avg_fpts) else None
+
             projections.append(
                 ProjectionResult(
                     player_name=player["player_name"],
                     team=context["team"],
                     opponent=context["opponent"],
                     positions=player.get("positions", ""),
-                    salary=float(player.get("salary")) if not pd.isna(player.get("salary")) else None,
+                    salary=salary_value,
                     projection=float(projection),
                     model_type=model_type,
                     batting_order=context.get("batting_order"),
                     is_home=context.get("is_home", False),
                     vegas_total=context.get("vegas_total"),
                     vegas_line=context.get("vegas_line"),
+                    dk_id=dk_identifier,
+                    row_id=row_identifier,
+                    game_info=player.get("game_info"),
+                    avg_fpts=avg_fpts_value,
+                    lineup_status=context.get("lineup_status"),
                 )
             )
 
         output = pd.DataFrame([pr.__dict__ for pr in projections])
         output = self.ownership_estimator.estimate(output)
+
+        template_df: Optional[pd.DataFrame] = None
+        if template_csv:
+            template_df = self._format_template_output(output)
+            template_path = Path(template_csv)
+            template_path.parent.mkdir(parents=True, exist_ok=True)
+            template_df.to_csv(template_path, index=False)
+
         if output_csv:
             path = Path(output_csv)
             path.parent.mkdir(parents=True, exist_ok=True)
             output.to_csv(path, index=False)
-        return output
+
+        return output, template_df
 
     # ----------------------------
     # Helpers
     # ----------------------------
+    @staticmethod
+    def _build_lineup_lookup(lineups: pd.DataFrame) -> dict[str, pd.DataFrame]:
+        if lineups.empty:
+            return {}
+
+        working = lineups.copy()
+        if "status" in working.columns:
+            working["__status_order"] = pd.Categorical(
+                working["status"], categories=["confirmed", "projected"], ordered=True
+            )
+            working.sort_values(
+                ["normalized_name", "__status_order", "batting_order"], inplace=True, na_position="last"
+            )
+        else:
+            working.sort_values(
+                ["normalized_name", "batting_order"], inplace=True, na_position="last"
+            )
+
+        lookup: dict[str, pd.DataFrame] = {}
+        for name, group in working.groupby("normalized_name"):
+            lookup[name] = group.drop(columns=["__status_order"], errors="ignore")
+        return lookup
+
+    @staticmethod
+    def _select_lineup_row(lookup: dict[str, pd.DataFrame], normalized_name: str) -> Optional[pd.Series]:
+        group = lookup.get(normalized_name)
+        if group is None or group.empty:
+            return None
+
+        if "status" in group.columns:
+            confirmed = group[group["status"] == "confirmed"]
+            if not confirmed.empty:
+                return confirmed.iloc[0]
+        return group.iloc[0]
+
+    def _format_template_output(self, frame: pd.DataFrame) -> pd.DataFrame:
+        template_frame = frame.copy()
+
+        player_ids_series = template_frame.get("dk_id")
+        if player_ids_series is None:
+            player_ids = pd.Series(np.nan, index=template_frame.index)
+        else:
+            player_ids = player_ids_series.copy()
+        if "row_id" in template_frame:
+            player_ids = player_ids.fillna(template_frame["row_id"])
+
+        def _format_identifier(value: object) -> str:
+            if value is None or (isinstance(value, float) and np.isnan(value)):
+                return ""
+            try:
+                if isinstance(value, str) and value.strip() == "":
+                    return ""
+                return str(int(float(value)))
+            except (ValueError, TypeError):
+                return str(value)
+
+        player_ids = player_ids.apply(_format_identifier)
+
+        def _format_batting_order(row: pd.Series) -> str:
+            order = row.get("batting_order")
+            if order is None or (isinstance(order, float) and np.isnan(order)):
+                return "NS"
+            try:
+                return str(int(float(order)))
+            except (ValueError, TypeError):
+                return "NS"
+
+        hitter_slots = max(self.ownership_estimator.hitter_slots, 1)
+        pitcher_slots = max(self.ownership_estimator.pitcher_slots, 1)
+
+        def _ownership_pct(row: pd.Series) -> float:
+            value = row.get("ownership")
+            if value is None or (isinstance(value, float) and np.isnan(value)):
+                return 0.0
+            if row.get("model_type") == "hitter":
+                return float(value) / hitter_slots
+            if row.get("model_type") == "pitcher":
+                return float(value) / pitcher_slots
+            return float(value)
+
+        template_frame["player_id"] = player_ids
+        template_frame["batting_order_display"] = template_frame.apply(_format_batting_order, axis=1)
+        template_frame["ownership_pct"] = template_frame.apply(_ownership_pct, axis=1)
+        avg_points = template_frame.get("avg_fpts", pd.Series(0, index=template_frame.index)).fillna(0)
+        stddev_series = template_frame.get("projection_std", pd.Series(0, index=template_frame.index)).fillna(0)
+        game_info_series = template_frame.get("game_info", pd.Series("", index=template_frame.index)).fillna("")
+        lineup_status = template_frame.get("lineup_status", pd.Series("N/A", index=template_frame.index)).fillna("N/A")
+        salaries = template_frame.get("salary", pd.Series(0, index=template_frame.index)).fillna(0)
+
+        def _format_salary(value: object) -> int:
+            try:
+                if value is None or (isinstance(value, float) and np.isnan(value)):
+                    return 0
+                return int(float(value))
+            except (ValueError, TypeError):
+                return 0
+
+        salaries = salaries.apply(_format_salary)
+
+        template = pd.DataFrame(
+            {
+                "Name": template_frame["player_name"],
+                "PlayerId": template_frame["player_id"],
+                "Team": template_frame.get("team", pd.Series("", index=template_frame.index)).fillna(""),
+                "Salary": salaries,
+                "GameInfo": game_info_series,
+                "Position": template_frame.get("positions", pd.Series("", index=template_frame.index)).fillna(""),
+                "Projection": template_frame.get("projection", pd.Series(0.0, index=template_frame.index)).fillna(0.0),
+                "StdDev": stddev_series,
+                "Ownership": template_frame["ownership_pct"],
+                "BattingOrder": template_frame["batting_order_display"],
+                "FieldPts": avg_points,
+                "LineupStatus": lineup_status,
+            }
+        )
+
+        return template
+
     def _load_feature_tables(self) -> tuple[pd.DataFrame, pd.DataFrame]:
         hitters_path = self.feature_dir / "hitters.parquet"
         pitchers_path = self.feature_dir / "pitchers.parquet"
@@ -271,10 +427,16 @@ class ProjectionPipeline:
         opponent, is_home = self._opponent_from_game_info(team, game_info)
 
         batting_order = None
+        lineup_status = "N/A"
         if lineup_row is not None:
             opponent = lineup_row.get("opponent", opponent)
             is_home = bool(lineup_row.get("is_home", is_home))
             batting_order = lineup_row.get("batting_order", np.nan)
+            status_raw = str(lineup_row.get("status", "")).lower() if lineup_row.get("status") is not None else ""
+            if status_raw == "confirmed":
+                lineup_status = "Confirmed"
+            elif status_raw == "projected":
+                lineup_status = "Projected"
 
         vegas_total = vegas_by_team.get((team, "total"))
         vegas_line = vegas_by_team.get((team, "line"))
@@ -288,6 +450,7 @@ class ProjectionPipeline:
             "vegas_total": vegas_total,
             "vegas_line": vegas_line,
             "game_datetime": lineup_dt,
+            "lineup_status": lineup_status,
         }
         return context
 
