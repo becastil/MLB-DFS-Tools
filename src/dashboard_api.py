@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 
@@ -581,6 +581,25 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/", include_in_schema=False)
+def healthcheck() -> Dict[str, str]:
+    """Provide a friendly landing response for platform health checks."""
+
+    return {
+        "status": "ok",
+        "message": "MLB DFS Dashboard API is running.",
+        "docs": "/docs",
+        "sites": "/api/dashboard/sites",
+    }
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon() -> Response:
+    """Return an empty response so the platform does not log a 404."""
+
+    return Response(status_code=204)
 
 
 @app.get("/api/dashboard/sites")
