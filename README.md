@@ -183,11 +183,107 @@ The `src/pipeline` package implements an end-to-end workflow for building DraftK
    ```
    Add `--template-output output/template.csv` if you need a CSV shaped like `Projection_Template_MLB (5).csv` for easy uploads to online optimizers.
 
+### End-to-end DraftKings MLB workflow
+
+#### One-time setup
+
+- `python -m pip install -r requirements.txt` inside a virtual environment if possible.
+- Copy `sample.config.json` to `config.json` and adjust stacking or randomness rules later as needed.
+- Keep the default directory layout (`dk_data/`, `fd_data/`, `output/`) – the optimizer and simulator read from these folders automatically.
+
+#### Train the projection models (run occasionally)
+
+- First time you clone the repo – and any time you want to refresh with new seasons – run:
+  ```bash
+  python -m pipeline.cli train --seasons 2022 2023 2024 --data-dir pipeline_artifacts
+  ```
+  The run downloads MLB box scores plus FanGraphs data and caches everything under `pipeline_artifacts/`. Future `project` runs reuse that cache, so you only wait once.
+
+#### Daily slate checklist
+
+1. **Download the DraftKings export.** On the DK lineup page, click *Export to CSV* and save it as `dk_data/player_ids.csv`.
+2. **Generate projections/ownership.** Use the projection CLI with the slate date (YYYY-MM-DD). Example for April 1st, 2025:
+   ```bash
+   python -m pipeline.cli project \n       --slate dk_data/player_ids.csv \n       --date 2025-04-01 \n       --data-dir pipeline_artifacts \n       --output output/projections.csv \n       --template-output output/dk_template.csv
+   ```
+   - `output/projections.csv` keeps the full model output for debugging.
+   - `output/dk_template.csv` matches the public DK template and can be uploaded directly into third-party sim/optimizer tools online.
+3. **Prepare files for the local optimizer.**
+   - Open `output/dk_template.csv` (Excel/Sheets is fine) and save a copy as `dk_data/projections.csv`.
+   - Rename the header row to match what the optimizer expects:
+     | Template column | Optimizer column | Notes |
+     | --- | --- | --- |
+     | `Name` | `name` | leave player spelling intact |
+     | `Position` | `pos` | positions stay in the same format (e.g. `1B/3B`) |
+     | `Team` | `team` | |
+     | `Salary` | `salary` | ensure it remains numeric |
+     | `Projection` | `fpts` | the optimizer treats this as fantasy points |
+     | `Ownership` | `own%` | already scaled to 0–100 by the template export |
+     | `BattingOrder` | `ord` | optional but helps with stack rules |
+   - Delete columns you do not need (GameInfo, StdDev, etc.) or leave them – extra columns are ignored.
+4. **Optional: update stack ownership.** If you want the simulator to use custom stack exposures, update `dk_data/team_stacks.csv` with `Team,Own%` values.
+5. **Optional: archive the DK template.** If you plan to upload projections/ownership to an online sim, keep `output/dk_template.csv` (or copy it somewhere safe) and upload it as-is.
+
+#### Run the local optimizer
+
+- Generate lineups once the projections are in place. Example: build 150 lineups with at least 2 uniques.
+  ```bash
+  python -m src.main dk opto 150 2
+  ```
+  - Results land in `output/dk_optimal_lineups_YYYY-MM-DD_HH-MM-SS.csv`.
+  - Tweak rules via `config.json` (stack sizes, randomness, salary floor, etc.).
+
+#### Run the tournament simulator
+
+- Provide a contest structure (copy one from DraftKings into `dk_data/contest_structure.csv`) and optional stack file.
+- To simulate a specific contest using the optimizer’s output (`file` flag):
+  ```bash
+  python -m src.main dk sim cid file 10000
+  ```
+  - `cid` tells the sim to read `dk_data/contest_structure.csv` for field size and payouts.
+  - The optimizer output must be renamed to `output/tournament_lineups.csv` before running with the `file` flag, or supply your own field sample.
+  - Replace `10000` with the number of iterations you want to run.
+
+#### Check lineup uniqueness (optional but recommended)
+
+- The analyzer expects a "long" CSV with one row per player per lineup (columns such as `lineup_id`, `player`, `ownership`, `salary`). Many third-party optimizers export in that shape; if you are using the built-in optimizer, see the reshaping snippet below.
+- Example call against a lineup file that already contains a `lineup_id` column and ownership percentages:
+  ```bash
+  python -m pipeline.cli analyze --lineups my_lineups.csv --lineup-col lineup_id --ownership-col ownership --top 20
+  ```
+- To reshape the optimizer output (`output/dk_optimal_lineups_YYYY-MM-DD_HH-MM-SS.csv`) into the expected format, run:
+  ```bash
+  python - <<'PY'
+  import pandas as pd
+  from pathlib import Path
+
+  source = Path('output/dk_optimal_lineups_YYYY-MM-DD_HH-MM-SS.csv')  # replace with your filename
+  frame = pd.read_csv(source)
+  long_rows = []
+  for idx, row in frame.iterrows():
+      lineup_id = f"lineup_{idx+1}"
+      ownership_sum = float(row['Own. Sum']) if 'Own. Sum' in row else None
+      for pos in ['P','P.1','C','1B','2B','3B','SS','OF','OF.1','OF.2']:
+          if pos not in row:
+              continue
+          player = str(row[pos]).split(' (')[0]
+          long_rows.append({
+              'lineup_id': lineup_id,
+              'position': pos.replace('.1',''),
+              'player': player,
+              'ownership': ownership_sum / 10 if ownership_sum is not None else None
+          })
+  long = pd.DataFrame(long_rows)
+  out_path = source.with_name(source.stem + '_long.csv')
+  long.to_csv(out_path, index=False)
+  print(f'Wrote {out_path}')
+  PY
+  ```
+  Adjust the ownership calculation to taste (the example simply spreads the summed ownership evenly across the roster). The resulting `_long.csv` file can then be analyzed with `pipeline.cli analyze`.
+
 ### Lineup uniqueness analysis
 
-- Run `python -m pipeline.cli analyze --lineups my_lineups.csv --lineup-col lineup_id --ownership-col ownership --top 20` to compare cumulative ownership against ownership products for each lineup.
-- Ownership products are calculated exactly as described in `articles/the-fallacy-of-cumulative-ownership.md`, offering a quick proxy for duplication risk.
-- Provide `--output output/lineup_metrics.csv` to save the full table, or include `--salary-col salary` if your lineup file has per-player salaries to sum.
+A deeper explanation of the ownership-product idea lives in `articles/the-fallacy-of-cumulative-ownership.md`. The `pipeline.cli analyze` command described above applies that math to any lineup CSV so you can spot duplicates before locking them. Use the optional `--output` flag to save the table or `--salary-col` if your file includes per-player salaries.
 
 ### Data flow overview
 
