@@ -1,0 +1,8 @@
+numpy>=2.3
+pandas>=2.3
+pybaseball>=2.2.7
+beautifulsoup4>=4.13
+lxml>=6.0
+requests>=2.31
+scikit-learn>=1.7
+joblib>=1.5

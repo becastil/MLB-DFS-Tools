@@ -162,3 +162,34 @@ Ethereum Address:
 ![Eth Wallet QR Code](readme_images/eth_qr_code.png)
 
 0x2D62C15849ddC68DDB2F9dFBC426f0bF46eaE006
+
+## MLB Projection & Ownership Pipeline
+
+The `src/pipeline` package implements an end-to-end workflow for building DraftKings projections and ownership estimates from public data. The tooling can be run entirely from the command line and will cache data locally so that day-to-day updates are faster.
+
+### Quick start
+
+1. Install dependencies (ideally in a virtual environment):
+   ```bash
+   python -m pip install -r requirements.txt
+   ```
+2. Train or refresh the models (this downloads three seasons of box scores, FanGraphs leaderboards, and computes features):
+   ```bash
+   python -m pipeline.cli train --seasons 2022 2023 2024 --data-dir pipeline_artifacts
+   ```
+3. Generate projections for a DraftKings slate CSV and automatically attach ownership estimates:
+   ```bash
+   python -m pipeline.cli project --slate dk_data/player_ids.csv --date 2025-04-01 --output output/projections.csv
+   ```
+
+### Data flow overview
+
+- **MLB Stats API**: pulls game-level box scores to compute historical DraftKings points for hitters and pitchers. The client caches every box score in `pipeline_artifacts/raw/mlb_stats` so future runs only request new games.
+- **FanGraphs leaderboards**: season-long advanced metrics (wOBA, wRC+, ERA, etc.) are merged into the feature set to give the model context on player talent.*
+- **RotoWire lineups + DraftKings slate**: drive slate-day context (batting order, moneylines/totals, salaries) before scoring and ownership estimation.
+- **Modeling**: separate ridge regression models for hitters and pitchers supply projections. Rolling averages (last 3/7/15 games), betting context, and FanGraphs stats feed the features.
+- **Ownership heuristic**: allocations are derived from projection value, batting order, and betting signals and normalised to the DraftKings roster slot counts (8 hitters, 2 pitchers).
+
+> *For FanGraphs requests the code relies on `pybaseball`. If you need to refresh cached leaderboards, pass `--force-refresh` to the `train` command.*
+
+Outputs are written to the `output/` directory by default with columns compatible with the existing optimizer (`projection`, `ownership`, `positions`, `team`, and matchup context).
