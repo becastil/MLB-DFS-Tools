@@ -6,4 +6,6 @@ config.json
 mlb-simmer/*
 venv/*
 dk_data/*
+!dk_data/projections.csv
 fd_data/*
+!fd_data/projections.csv

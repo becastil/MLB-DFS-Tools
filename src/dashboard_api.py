@@ -532,11 +532,11 @@ def build_dashboard_payload(site: str) -> Dict[str, object]:
     sim_lineups, sim_info = _load_simulation_lineups(site)
     exposure_df, exposure_info = _load_simulation_exposure(site)
 
-    if all(
-        dataset is None or (hasattr(dataset, "empty") and dataset.empty)
-        for dataset in (projections_df, optimizer_df, sim_lineups, exposure_df)
-    ):
-        raise HTTPException(status_code=404, detail="No dashboard data found for the requested site.")
+    datasets = (projections_df, optimizer_df, sim_lineups, exposure_df)
+    has_data = any(
+        dataset is not None and not (hasattr(dataset, "empty") and dataset.empty)
+        for dataset in datasets
+    )
 
     payload: Dict[str, object] = {
         "site": site,
@@ -561,8 +561,10 @@ def build_dashboard_payload(site: str) -> Dict[str, object]:
             "simulation": _format_timestamp(sim_info),
             "playerExposure": _format_timestamp(exposure_info),
         },
+        "hasData": has_data,
     }
 
+    payload["projectionSample"] = []
     if projections_df is not None and not projections_df.empty:
         sample_columns = [col for col in ["name", "team", "pos", "fpts", "own%"] if col in projections_df.columns]
         if sample_columns:

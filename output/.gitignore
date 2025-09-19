@@ -2,3 +2,7 @@
 *
 # Except this file
 !.gitignore
+# Allow representative dashboard artefacts
+!dk_optimal_lineups_*.csv
+!dk_gpp_sim_lineups_*.csv
+!dk_gpp_sim_player_exposure_*.csv
