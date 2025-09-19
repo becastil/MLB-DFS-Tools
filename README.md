@@ -183,6 +183,12 @@ The `src/pipeline` package implements an end-to-end workflow for building DraftK
    ```
    Add `--template-output output/template.csv` if you need a CSV shaped like `Projection_Template_MLB (5).csv` for easy uploads to online optimizers.
 
+### Lineup uniqueness analysis
+
+- Run `python -m pipeline.cli analyze --lineups my_lineups.csv --lineup-col lineup_id --ownership-col ownership --top 20` to compare cumulative ownership against ownership products for each lineup.
+- Ownership products are calculated exactly as described in `articles/the-fallacy-of-cumulative-ownership.md`, offering a quick proxy for duplication risk.
+- Provide `--output output/lineup_metrics.csv` to save the full table, or include `--salary-col salary` if your lineup file has per-player salaries to sum.
+
 ### Data flow overview
 
 - **MLB Stats API**: pulls game-level box scores to compute historical DraftKings points for hitters and pitchers. The client caches every box score in `pipeline_artifacts/raw/mlb_stats` so future runs only request new games.

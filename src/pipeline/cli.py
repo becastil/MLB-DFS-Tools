@@ -4,6 +4,9 @@ import argparse
 from datetime import date
 from pathlib import Path
 
+import pandas as pd
+
+from .analysis import LineupOwnershipAnalyzer
 from .projection_pipeline import ProjectionPipeline
 
 
@@ -51,6 +54,35 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional path for a projection CSV formatted like the projection template.",
     )
 
+    analyze_parser = subparsers.add_parser("analyze", help="Evaluate lineup ownership metrics")
+    analyze_parser.add_argument("--lineups", type=Path, required=True, help="CSV containing lineups with ownership")
+    analyze_parser.add_argument(
+        "--lineup-col",
+        default="lineup_id",
+        help="Column identifying individual lineups (default: lineup_id).",
+    )
+    analyze_parser.add_argument(
+        "--ownership-col",
+        default="ownership",
+        help="Column containing ownership percentages or probabilities.",
+    )
+    analyze_parser.add_argument(
+        "--salary-col",
+        default=None,
+        help="Optional column containing player salaries to sum per lineup.",
+    )
+    analyze_parser.add_argument(
+        "--output",
+        type=Path,
+        help="Optional destination for the lineup analysis CSV.",
+    )
+    analyze_parser.add_argument(
+        "--top",
+        type=int,
+        default=10,
+        help="Number of lineups to display in the console (0 prints all).",
+    )
+
     return parser
 
 
@@ -76,6 +108,25 @@ def main(argv: list[str] | None = None) -> None:
             print(f"Wrote {len(output)} player projections to {args.output}")
         if args.template_output:
             print(f"Wrote template-formatted projections to {args.template_output}")
+    elif args.command == "analyze":
+        analyzer = LineupOwnershipAnalyzer(
+            lineup_col=args.lineup_col,
+            ownership_col=args.ownership_col,
+            salary_col=args.salary_col,
+        )
+        metrics = analyzer.analyze_file(args.lineups)
+        metrics = metrics.sort_values("ownership_product", ascending=False)
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            metrics.to_csv(args.output, index=False)
+            print(f"Wrote lineup analysis to {args.output}")
+        top_n = args.top if args.top is not None else 10
+        if top_n == 0:
+            display = metrics
+        else:
+            display = metrics.head(top_n)
+        pd.set_option("display.float_format", lambda x: f"{x:.6f}")
+        print(display.to_string(index=False))
     else:
         parser.error("Unknown command")
 
