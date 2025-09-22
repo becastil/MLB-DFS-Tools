@@ -33,6 +33,19 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+class SPAStaticFiles(StaticFiles):
+    """Custom StaticFiles handler that serves index.html for unmatched routes (SPA support)."""
+    
+    async def get_response(self, path: str, scope):
+        try:
+            return await super().get_response(path, scope)
+        except Exception as ex:
+            # If we get a 404, serve index.html instead to support client-side routing
+            if getattr(ex, 'status_code', None) == 404:
+                return await super().get_response("index.html", scope)
+            raise ex
+
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 OUTPUT_DIR = BASE_DIR / "output"
 FRONTEND_DIST_DIR = BASE_DIR / "frontend" / "dist"
@@ -597,20 +610,23 @@ if FRONTEND_DIST_DIR.exists():
     if INDEX_FILE.exists():
         logger.info(f"✓ Frontend bundle found at {FRONTEND_DIST_DIR}")
         logger.info(f"✓ Mounting React SPA at / with index file: {INDEX_FILE}")
+        
+        # Mount static assets (CSS, JS, images) with proper caching
+        static_assets_dir = FRONTEND_DIST_DIR / "assets"
+        if static_assets_dir.exists():
+            app.mount(
+                "/assets", 
+                StaticFiles(directory=static_assets_dir), 
+                name="static_assets"
+            )
+            logger.info(f"✓ Mounted static assets at /assets from {static_assets_dir}")
+        
+        # Mount the SPA with fallback to index.html for client-side routing
         app.mount(
             "/",
-            StaticFiles(directory=FRONTEND_DIST_DIR, html=True),
+            SPAStaticFiles(directory=FRONTEND_DIST_DIR, html=True),
             name="dashboard",
         )
-
-        @app.get("/{full_path:path}", include_in_schema=False)
-        async def serve_frontend(full_path: str) -> Response:
-            """Serve the single page application for non-API routes."""
-
-            if full_path.startswith("api") or not INDEX_FILE.exists():
-                raise HTTPException(status_code=404)
-
-            return FileResponse(INDEX_FILE)
     else:
         logger.error(f"✗ Frontend dist directory exists but index.html missing: {INDEX_FILE}")
 else:
