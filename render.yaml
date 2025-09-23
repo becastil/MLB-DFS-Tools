@@ -2,7 +2,36 @@ services:
   - type: web
     name: mlb-dfs-tools-api
     env: python
-    buildCommand: pip install -r requirements.txt && cd frontend && npm ci && npm run build && if [ ! -f dist/index.html ]; then echo "ERROR: Frontend build failed - dist/index.html not found"; exit 1; else echo "✓ Frontend build successful - dist/index.html exists"; fi && cd ..
+    buildCommand: |
+      # Ensure Node.js 20 is available
+      node --version || (curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt-get install -y nodejs)
+      npm --version
+      
+      # Install Python dependencies
+      pip install -r requirements.txt
+      
+      # Build frontend with verbose logging
+      echo "Building frontend..."
+      cd frontend
+      npm ci
+      npm run build
+      
+      # Verify frontend build with detailed output
+      if [ ! -f dist/index.html ]; then 
+        echo "ERROR: Frontend build failed - dist/index.html not found"
+        echo "Contents of frontend directory:"
+        ls -la
+        echo "Contents of dist directory (if exists):"
+        ls -la dist/ || echo "dist directory does not exist"
+        exit 1
+      else
+        echo "✓ Frontend build successful - dist/index.html exists"
+        echo "Frontend dist contents:"
+        ls -la dist/
+      fi
+      cd ..
+      
+      echo "✓ Build completed successfully"
     startCommand: uvicorn src.dashboard_api:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHONPATH
@@ -11,3 +40,5 @@ services:
         value: '20'
       - key: CORS_ORIGINS
         value: "*"
+      - key: FIRECRAWL_API_KEY
+        value: fc-b74cc2c2a30e4e0e936da405cef1f851
