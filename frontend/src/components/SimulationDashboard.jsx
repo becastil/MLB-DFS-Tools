@@ -37,7 +37,9 @@ import {
   List,
   AlertTriangle,
   Database,
+  Globe,
 } from 'lucide-react';
+import FirecrawlPanel from './FirecrawlPanel';
 
 const palette = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#f97316', '#ef4444'];
 
@@ -186,7 +188,7 @@ const SimulationDashboard = () => {
               </div>
 
               <nav className="flex space-x-1">
-                {['dashboard', 'simulations', 'projections', 'optimizer', 'analytics'].map((tab) => (
+                {['dashboard', 'simulations', 'projections', 'optimizer', 'analytics', 'web-scraper'].map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
@@ -196,7 +198,14 @@ const SimulationDashboard = () => {
                         : 'text-gray-400 hover:text-white hover:bg-white/5'
                     }`}
                   >
-                    {tab}
+                    {tab === 'web-scraper' ? (
+                      <div className="flex items-center space-x-2">
+                        <Globe className="w-4 h-4" />
+                        <span>Web Scraper</span>
+                      </div>
+                    ) : (
+                      tab
+                    )}
                   </button>
                 ))}
               </nav>
@@ -277,24 +286,32 @@ const SimulationDashboard = () => {
       </div>
 
       <div className="p-6 space-y-6">
-        {loading && (
-          <div className="flex items-center justify-center bg-black/30 border border-white/10 rounded-xl py-12">
-            <RefreshCw className="w-6 h-6 text-indigo-400 animate-spin" />
-            <span className="ml-3 text-sm text-gray-300">Loading dashboard data...</span>
-          </div>
+        {/* Web Scraper Tab */}
+        {activeTab === 'web-scraper' && (
+          <FirecrawlPanel />
         )}
 
-        {error && !loading && (
-          <div className="flex items-center space-x-3 bg-red-500/10 border border-red-500/30 text-red-200 px-4 py-3 rounded-xl">
-            <AlertTriangle className="w-5 h-5" />
-            <div>
-              <p className="font-semibold">Data unavailable</p>
-              <p className="text-sm text-red-200/80">{error}</p>
-            </div>
-          </div>
-        )}
+        {/* Other tabs content */}
+        {activeTab !== 'web-scraper' && (
+          <>
+            {loading && (
+              <div className="flex items-center justify-center bg-black/30 border border-white/10 rounded-xl py-12">
+                <RefreshCw className="w-6 h-6 text-indigo-400 animate-spin" />
+                <span className="ml-3 text-sm text-gray-300">Loading dashboard data...</span>
+              </div>
+            )}
 
-        {!loading && !error && dashboardData && (
+            {error && !loading && (
+              <div className="flex items-center space-x-3 bg-red-500/10 border border-red-500/30 text-red-200 px-4 py-3 rounded-xl">
+                <AlertTriangle className="w-5 h-5" />
+                <div>
+                  <p className="font-semibold">Data unavailable</p>
+                  <p className="text-sm text-red-200/80">{error}</p>
+                </div>
+              </div>
+            )}
+
+            {!loading && !error && dashboardData && (
           <div className="grid grid-cols-12 gap-6">
             <aside className="col-span-12 lg:col-span-3 space-y-6">
               <section className="bg-black/30 backdrop-blur-lg rounded-xl border border-white/10 p-4">
@@ -577,6 +594,8 @@ const SimulationDashboard = () => {
               </section>
             </main>
           </div>
+            )}
+          </>
         )}
       </div>
 

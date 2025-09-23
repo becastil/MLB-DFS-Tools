@@ -28,6 +28,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+# Firecrawl integration
+from pipeline.data_sources.firecrawl_client import get_firecrawl_client
+from pipeline.data_sources.mlb_extraction_schemas import MLBExtractionSchemas, MLBExtractionPrompts
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -718,6 +722,458 @@ def get_default_dashboard() -> Dict[str, object]:
     data = build_dashboard_payload(target_site)
     data["availableSites"] = sites or list(SITE_DIRECTORIES.keys())
     return data
+
+
+# Firecrawl API endpoints
+@app.post("/api/scrape")
+async def scrape_url(request: Dict[str, str]) -> Dict[str, object]:
+    """Scrape a single URL using Firecrawl."""
+    try:
+        url = request.get("url")
+        if not url:
+            raise HTTPException(status_code=400, detail="URL is required")
+        
+        client = get_firecrawl_client()
+        result = client.scrape_url(url)
+        
+        return {
+            "success": True,
+            "data": result,
+            "url": url
+        }
+    except ValueError as e:
+        logger.error(f"Configuration error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Firecrawl API key not configured")
+    except Exception as e:
+        logger.error(f"Error scraping URL {url}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to scrape URL: {str(e)}")
+
+
+@app.post("/api/scrape/mlb-stats")
+async def scrape_mlb_stats(request: Dict[str, str]) -> Dict[str, object]:
+    """Scrape MLB statistics from a URL with optimized extraction."""
+    try:
+        url = request.get("url")
+        if not url:
+            raise HTTPException(status_code=400, detail="URL is required")
+        
+        client = get_firecrawl_client()
+        result = client.scrape_mlb_stats_site(url)
+        
+        return {
+            "success": True,
+            "data": result,
+            "url": url,
+            "type": "mlb_stats"
+        }
+    except ValueError as e:
+        logger.error(f"Configuration error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Firecrawl API key not configured")
+    except Exception as e:
+        logger.error(f"Error scraping MLB stats from {url}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to scrape MLB stats: {str(e)}")
+
+
+@app.post("/api/scrape/injury-report")
+async def scrape_injury_report(request: Dict[str, str]) -> Dict[str, object]:
+    """Scrape injury reports with structured extraction."""
+    try:
+        url = request.get("url")
+        if not url:
+            raise HTTPException(status_code=400, detail="URL is required")
+        
+        client = get_firecrawl_client()
+        result = client.scrape_injury_report(url)
+        
+        return {
+            "success": True,
+            "data": result,
+            "url": url,
+            "type": "injury_report"
+        }
+    except ValueError as e:
+        logger.error(f"Configuration error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Firecrawl API key not configured")
+    except Exception as e:
+        logger.error(f"Error scraping injury report from {url}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to scrape injury report: {str(e)}")
+
+
+@app.post("/api/scrape/weather")
+async def scrape_weather_data(request: Dict[str, str]) -> Dict[str, object]:
+    """Scrape weather data for MLB games."""
+    try:
+        url = request.get("url")
+        if not url:
+            raise HTTPException(status_code=400, detail="URL is required")
+        
+        client = get_firecrawl_client()
+        result = client.scrape_weather_data(url)
+        
+        return {
+            "success": True,
+            "data": result,
+            "url": url,
+            "type": "weather_data"
+        }
+    except ValueError as e:
+        logger.error(f"Configuration error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Firecrawl API key not configured")
+    except Exception as e:
+        logger.error(f"Error scraping weather data from {url}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to scrape weather data: {str(e)}")
+
+
+@app.post("/api/crawl")
+async def crawl_website(request: Dict[str, object]) -> Dict[str, object]:
+    """Crawl an entire website starting from the given URL."""
+    try:
+        url = request.get("url")
+        if not url:
+            raise HTTPException(status_code=400, detail="URL is required")
+        
+        # Extract crawl parameters
+        crawl_params = {k: v for k, v in request.items() if k != "url"}
+        
+        client = get_firecrawl_client()
+        result = client.crawl_website(url, **crawl_params)
+        
+        return {
+            "success": True,
+            "data": result,
+            "url": url,
+            "type": "website_crawl"
+        }
+    except ValueError as e:
+        logger.error(f"Configuration error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Firecrawl API key not configured")
+    except Exception as e:
+        logger.error(f"Error crawling website {url}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to crawl website: {str(e)}")
+
+
+@app.post("/api/scrape/bulk")
+async def bulk_scrape_urls(request: Dict[str, object]) -> Dict[str, object]:
+    """Scrape multiple URLs in batch."""
+    try:
+        urls = request.get("urls")
+        if not urls or not isinstance(urls, list):
+            raise HTTPException(status_code=400, detail="URLs array is required")
+        
+        # Extract scrape parameters
+        scrape_params = {k: v for k, v in request.items() if k != "urls"}
+        
+        client = get_firecrawl_client()
+        results = client.bulk_scrape_urls(urls, **scrape_params)
+        
+        return {
+            "success": True,
+            "data": results,
+            "total_urls": len(urls),
+            "type": "bulk_scrape"
+        }
+    except ValueError as e:
+        logger.error(f"Configuration error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Firecrawl API key not configured")
+    except Exception as e:
+        logger.error(f"Error bulk scraping URLs: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to bulk scrape URLs: {str(e)}")
+
+
+# Advanced Extract API endpoints using Firecrawl v2
+@app.post("/api/extract")
+async def extract_structured_data(request: Dict[str, object]) -> Dict[str, object]:
+    """Extract structured data using LLMs from one or multiple URLs."""
+    try:
+        urls = request.get("urls")
+        if not urls or not isinstance(urls, list):
+            raise HTTPException(status_code=400, detail="URLs array is required")
+        
+        prompt = request.get("prompt")
+        schema = request.get("schema")
+        enable_web_search = request.get("enableWebSearch", False)
+        
+        if not prompt and not schema:
+            raise HTTPException(status_code=400, detail="Either prompt or schema is required")
+        
+        client = get_firecrawl_client()
+        result = client.extract(
+            urls=urls,
+            prompt=prompt,
+            schema=schema,
+            enable_web_search=enable_web_search
+        )
+        
+        return {
+            "success": True,
+            "data": result,
+            "urls": urls,
+            "type": "extract"
+        }
+    except ValueError as e:
+        logger.error(f"Configuration error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Firecrawl API key not configured")
+    except Exception as e:
+        logger.error(f"Error extracting data: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to extract data: {str(e)}")
+
+
+@app.post("/api/extract/start")
+async def start_extract_job(request: Dict[str, object]) -> Dict[str, object]:
+    """Start an extraction job without waiting for completion."""
+    try:
+        urls = request.get("urls")
+        if not urls or not isinstance(urls, list):
+            raise HTTPException(status_code=400, detail="URLs array is required")
+        
+        prompt = request.get("prompt")
+        schema = request.get("schema")
+        enable_web_search = request.get("enableWebSearch", False)
+        
+        if not prompt and not schema:
+            raise HTTPException(status_code=400, detail="Either prompt or schema is required")
+        
+        client = get_firecrawl_client()
+        result = client.start_extract(
+            urls=urls,
+            prompt=prompt,
+            schema=schema,
+            enable_web_search=enable_web_search
+        )
+        
+        return {
+            "success": True,
+            "job_id": result.id,
+            "status": result.status,
+            "urls": urls,
+            "type": "async_extract"
+        }
+    except ValueError as e:
+        logger.error(f"Configuration error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Firecrawl API key not configured")
+    except Exception as e:
+        logger.error(f"Error starting extract job: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to start extract job: {str(e)}")
+
+
+@app.get("/api/extract/status/{job_id}")
+async def get_extract_job_status(job_id: str) -> Dict[str, object]:
+    """Get the status of an extraction job."""
+    try:
+        client = get_firecrawl_client()
+        result = client.get_extract_status(job_id)
+        
+        return {
+            "success": True,
+            "job_id": job_id,
+            "status": result.status,
+            "data": result.data if hasattr(result, 'data') else None,
+            "expires_at": result.expires_at if hasattr(result, 'expires_at') else None
+        }
+    except ValueError as e:
+        logger.error(f"Configuration error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Firecrawl API key not configured")
+    except Exception as e:
+        logger.error(f"Error getting job status: {str(e)}")
+        raise HTTPException(status_code=404, detail=f"Job not found or expired: {str(e)}")
+
+
+@app.post("/api/extract/mlb-season-stats")
+async def extract_mlb_season_stats(request: Dict[str, object]) -> Dict[str, object]:
+    """Extract comprehensive MLB season statistics."""
+    try:
+        base_url = request.get("url")
+        if not base_url:
+            raise HTTPException(status_code=400, detail="URL is required")
+        
+        enable_web_search = request.get("enableWebSearch", True)
+        
+        client = get_firecrawl_client()
+        result = client.extract_mlb_season_stats(base_url, enable_web_search)
+        
+        return {
+            "success": True,
+            "data": result,
+            "url": base_url,
+            "type": "mlb_season_stats"
+        }
+    except ValueError as e:
+        logger.error(f"Configuration error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Firecrawl API key not configured")
+    except Exception as e:
+        logger.error(f"Error extracting MLB season stats: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to extract MLB season stats: {str(e)}")
+
+
+@app.post("/api/extract/dfs-slate")
+async def extract_dfs_slate_info(request: Dict[str, object]) -> Dict[str, object]:
+    """Extract DFS slate information."""
+    try:
+        urls = request.get("urls")
+        if not urls or not isinstance(urls, list):
+            raise HTTPException(status_code=400, detail="URLs array is required")
+        
+        client = get_firecrawl_client()
+        result = client.extract_dfs_slate_info(urls)
+        
+        return {
+            "success": True,
+            "data": result,
+            "urls": urls,
+            "type": "dfs_slate"
+        }
+    except ValueError as e:
+        logger.error(f"Configuration error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Firecrawl API key not configured")
+    except Exception as e:
+        logger.error(f"Error extracting DFS slate info: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to extract DFS slate info: {str(e)}")
+
+
+@app.post("/api/extract/betting-lines")
+async def extract_betting_lines(request: Dict[str, object]) -> Dict[str, object]:
+    """Extract betting lines and odds information."""
+    try:
+        urls = request.get("urls")
+        if not urls or not isinstance(urls, list):
+            raise HTTPException(status_code=400, detail="URLs array is required")
+        
+        client = get_firecrawl_client()
+        result = client.extract_betting_lines(urls)
+        
+        return {
+            "success": True,
+            "data": result,
+            "urls": urls,
+            "type": "betting_lines"
+        }
+    except ValueError as e:
+        logger.error(f"Configuration error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Firecrawl API key not configured")
+    except Exception as e:
+        logger.error(f"Error extracting betting lines: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to extract betting lines: {str(e)}")
+
+
+@app.post("/api/extract/advanced-injury-report")
+async def extract_advanced_injury_report(request: Dict[str, object]) -> Dict[str, object]:
+    """Extract comprehensive injury reports with timelines."""
+    try:
+        urls = request.get("urls")
+        if not urls or not isinstance(urls, list):
+            raise HTTPException(status_code=400, detail="URLs array is required")
+        
+        client = get_firecrawl_client()
+        result = client.extract_advanced_injury_report(urls)
+        
+        return {
+            "success": True,
+            "data": result,
+            "urls": urls,
+            "type": "advanced_injury_report"
+        }
+    except ValueError as e:
+        logger.error(f"Configuration error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Firecrawl API key not configured")
+    except Exception as e:
+        logger.error(f"Error extracting injury report: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to extract injury report: {str(e)}")
+
+
+# Schema and template endpoints
+@app.get("/api/extract/schemas")
+async def get_extraction_schemas() -> Dict[str, object]:
+    """Get available extraction schemas."""
+    return {
+        "schemas": {
+            "player_stats": MLBExtractionSchemas.player_stats_schema(),
+            "team_standings": MLBExtractionSchemas.team_standings_schema(),
+            "injury_report": MLBExtractionSchemas.injury_report_schema(),
+            "weather_conditions": MLBExtractionSchemas.weather_conditions_schema(),
+            "dfs_slate": MLBExtractionSchemas.dfs_slate_schema(),
+            "betting_lines": MLBExtractionSchemas.betting_lines_schema(),
+            "roster_moves": MLBExtractionSchemas.roster_moves_schema()
+        }
+    }
+
+
+@app.get("/api/extract/prompts")
+async def get_extraction_prompts() -> Dict[str, object]:
+    """Get available extraction prompts."""
+    return {
+        "prompts": {
+            "player_stats": MLBExtractionPrompts.player_stats_prompt(),
+            "team_standings": MLBExtractionPrompts.team_standings_prompt(),
+            "injury_report": MLBExtractionPrompts.injury_report_prompt(),
+            "weather_conditions": MLBExtractionPrompts.weather_conditions_prompt(),
+            "dfs_slate": MLBExtractionPrompts.dfs_slate_prompt(),
+            "betting_lines": MLBExtractionPrompts.betting_lines_prompt(),
+            "roster_moves": MLBExtractionPrompts.roster_moves_prompt()
+        }
+    }
+
+
+@app.post("/api/extract/template")
+async def extract_with_template(request: Dict[str, object]) -> Dict[str, object]:
+    """Extract data using a pre-built template."""
+    try:
+        template_type = request.get("template")
+        urls = request.get("urls")
+        
+        if not template_type:
+            raise HTTPException(status_code=400, detail="Template type is required")
+        if not urls or not isinstance(urls, list):
+            raise HTTPException(status_code=400, detail="URLs array is required")
+        
+        # Get schema and prompt for template
+        schema_methods = {
+            "player_stats": MLBExtractionSchemas.player_stats_schema,
+            "team_standings": MLBExtractionSchemas.team_standings_schema,
+            "injury_report": MLBExtractionSchemas.injury_report_schema,
+            "weather_conditions": MLBExtractionSchemas.weather_conditions_schema,
+            "dfs_slate": MLBExtractionSchemas.dfs_slate_schema,
+            "betting_lines": MLBExtractionSchemas.betting_lines_schema,
+            "roster_moves": MLBExtractionSchemas.roster_moves_schema
+        }
+        
+        prompt_methods = {
+            "player_stats": MLBExtractionPrompts.player_stats_prompt,
+            "team_standings": MLBExtractionPrompts.team_standings_prompt,
+            "injury_report": MLBExtractionPrompts.injury_report_prompt,
+            "weather_conditions": MLBExtractionPrompts.weather_conditions_prompt,
+            "dfs_slate": MLBExtractionPrompts.dfs_slate_prompt,
+            "betting_lines": MLBExtractionPrompts.betting_lines_prompt,
+            "roster_moves": MLBExtractionPrompts.roster_moves_prompt
+        }
+        
+        if template_type not in schema_methods:
+            raise HTTPException(status_code=400, detail=f"Unknown template type: {template_type}")
+        
+        schema = schema_methods[template_type]()
+        prompt = prompt_methods[template_type]()
+        enable_web_search = request.get("enableWebSearch", False)
+        
+        client = get_firecrawl_client()
+        result = client.extract(
+            urls=urls,
+            prompt=prompt,
+            schema=schema,
+            enable_web_search=enable_web_search
+        )
+        
+        return {
+            "success": True,
+            "data": result,
+            "template": template_type,
+            "urls": urls,
+            "type": "template_extract"
+        }
+    except ValueError as e:
+        logger.error(f"Configuration error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Firecrawl API key not configured")
+    except Exception as e:
+        logger.error(f"Error extracting with template: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to extract with template: {str(e)}")
 
 
 if __name__ == "__main__":  # pragma: no cover - manual execution helper
