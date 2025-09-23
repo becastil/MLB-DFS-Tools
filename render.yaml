@@ -2,26 +2,7 @@ services:
   - type: web
     name: mlb-dfs-tools-api
     env: python
-    buildCommand: |
-      echo "🔍 Environment check..."
-      which node || echo "Node not found, will install"
-      which npm || echo "NPM not found"
-      which python3 || echo "Python3 not found"
-      
-      echo "📋 Installing Node.js if needed..."
-      if ! command -v node &> /dev/null; then
-        curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-        sudo apt-get install -y nodejs
-      fi
-      
-      echo "🎯 Current versions:"
-      node --version || echo "Node still not available"
-      npm --version || echo "NPM still not available"
-      python3 --version || echo "Python3 still not available"
-      
-      echo "🚀 Starting build process..."
-      chmod +x ./build.sh
-      ./build.sh
+    buildCommand: pip install -r requirements.txt && cd frontend && npm ci && npm run build && cd ..
     startCommand: uvicorn src.dashboard_api:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHONPATH
