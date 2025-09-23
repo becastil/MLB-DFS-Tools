@@ -605,21 +605,36 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+logger.info(f"Checking for frontend bundle at: {FRONTEND_DIST_DIR}")
+logger.info(f"Current working directory: {Path.cwd()}")
+logger.info(f"Base directory: {BASE_DIR}")
+
 if FRONTEND_DIST_DIR.exists():
+    logger.info(f"✓ Frontend dist directory exists: {FRONTEND_DIST_DIR}")
+    
+    # List contents of dist directory for debugging
+    dist_contents = list(FRONTEND_DIST_DIR.iterdir())
+    logger.info(f"Contents of {FRONTEND_DIST_DIR}: {[f.name for f in dist_contents]}")
+    
     INDEX_FILE = FRONTEND_DIST_DIR / "index.html"
     if INDEX_FILE.exists():
         logger.info(f"✓ Frontend bundle found at {FRONTEND_DIST_DIR}")
+        logger.info(f"✓ index.html size: {INDEX_FILE.stat().st_size} bytes")
         logger.info(f"✓ Mounting React SPA at / with index file: {INDEX_FILE}")
         
         # Mount static assets (CSS, JS, images) with proper caching
         static_assets_dir = FRONTEND_DIST_DIR / "assets"
         if static_assets_dir.exists():
+            assets_contents = list(static_assets_dir.iterdir())
+            logger.info(f"✓ Assets directory found with {len(assets_contents)} files")
             app.mount(
                 "/assets", 
                 StaticFiles(directory=static_assets_dir), 
                 name="static_assets"
             )
             logger.info(f"✓ Mounted static assets at /assets from {static_assets_dir}")
+        else:
+            logger.warning(f"⚠ Assets directory not found: {static_assets_dir}")
         
         # Mount the SPA with fallback to index.html for client-side routing
         app.mount(
@@ -627,10 +642,23 @@ if FRONTEND_DIST_DIR.exists():
             SPAStaticFiles(directory=FRONTEND_DIST_DIR, html=True),
             name="dashboard",
         )
+        logger.info("✓ Successfully mounted React SPA")
     else:
         logger.error(f"✗ Frontend dist directory exists but index.html missing: {INDEX_FILE}")
+        logger.error(f"  Available files in dist: {[f.name for f in FRONTEND_DIST_DIR.iterdir()]}")
 else:
     logger.error(f"✗ Frontend dist directory not found: {FRONTEND_DIST_DIR}")
+    logger.error(f"  Current directory contents: {[f.name for f in BASE_DIR.iterdir() if f.is_dir()]}")
+    
+    # Check if frontend directory exists at all
+    frontend_dir = BASE_DIR / "frontend"
+    if frontend_dir.exists():
+        logger.info(f"Frontend directory exists: {frontend_dir}")
+        frontend_contents = [f.name for f in frontend_dir.iterdir()]
+        logger.info(f"Frontend directory contents: {frontend_contents}")
+    else:
+        logger.error(f"Frontend directory does not exist: {frontend_dir}")
+    
     logger.error("  The React dashboard will not be served - only API endpoints available")
     
     @app.get("/", include_in_schema=False)

@@ -2,12 +2,12 @@ services:
   - type: web
     name: mlb-dfs-tools-api
     env: python
-    buildCommand: pip install -r requirements.txt && cd frontend && npm ci && npm run build && cd ..
+    buildCommand: pip install -r requirements.txt && cd frontend && npm ci && npm run build && if [ ! -f dist/index.html ]; then echo "ERROR: Frontend build failed - dist/index.html not found"; exit 1; else echo "✓ Frontend build successful - dist/index.html exists"; fi && cd ..
     startCommand: uvicorn src.dashboard_api:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHONPATH
         value: .
       - key: NODE_VERSION
-        value: '22'
+        value: '20'
       - key: CORS_ORIGINS
         value: "*"
