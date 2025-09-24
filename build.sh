@@ -81,7 +81,12 @@ echo "  - Node: $(node --version)"
 echo "  - NPM: $(npm --version)"
 echo "  - NPM config: $(npm config get registry)"
 
-npm ci --production=false
+# Clean install first, fallback to regular install if it fails
+if ! npm ci --production=false; then
+    echo "⚠ npm ci failed, trying regular install with legacy peer deps..."
+    rm -rf node_modules package-lock.json
+    npm install --legacy-peer-deps --production=false
+fi
 
 echo "📦 Dependencies installed. Node_modules size:"
 du -sh node_modules 2>/dev/null || echo "Could not check node_modules size"
