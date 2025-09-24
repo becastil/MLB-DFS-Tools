@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, date
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -1274,6 +1274,278 @@ async def upload_projections(request: Dict[str, object]) -> Dict[str, object]:
     except Exception as e:
         logger.error(f"Error uploading projections: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to upload projections: {str(e)}")
+
+
+# One-Click DFS Workflow Endpoints
+@app.post("/api/fetch/dk-slate")
+async def fetch_draftkings_slate(request: Dict[str, object]) -> Dict[str, object]:
+    """Automatically fetch DraftKings slate data using Firecrawl."""
+    try:
+        contest_url = request.get("contest_url")
+        slate_date = request.get("slate_date", datetime.now().strftime("%Y-%m-%d"))
+        
+        if not contest_url:
+            # Use a default DraftKings MLB contest page
+            contest_url = "https://www.draftkings.com/lobby#!/contests/nba"
+        
+        # Get Firecrawl client
+        client = get_firecrawl_client()
+        
+        # Extract slate information
+        logger.info(f"Fetching DraftKings slate from: {contest_url}")
+        slate_data = client.extract_dfs_slate_info([contest_url])
+        
+        # Process and save the slate data
+        if slate_data and slate_data.get('data'):
+            # Create player_ids.csv format expected by optimizer
+            dk_data_dir = BASE_DIR / "dk_data"
+            dk_data_dir.mkdir(exist_ok=True)
+            
+            player_ids_path = dk_data_dir / "player_ids.csv"
+            
+            # Convert extracted data to CSV format
+            players = slate_data['data'].get('players', [])
+            if players:
+                import csv
+                with open(player_ids_path, 'w', newline='', encoding='utf-8') as csvfile:
+                    fieldnames = ['Name', 'ID', 'Position', 'TeamAbbrev', 'Salary', 'AvgPointsPerGame', 'GameInfo', 'Opponent']
+                    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                    
+                    writer.writeheader()
+                    for player in players:
+                        writer.writerow({
+                            'Name': player.get('name', ''),
+                            'ID': player.get('player_id', ''),
+                            'Position': player.get('position', ''),
+                            'TeamAbbrev': player.get('team', ''),
+                            'Salary': player.get('salary', ''),
+                            'AvgPointsPerGame': player.get('avg_points', ''),
+                            'GameInfo': player.get('game_info', ''),
+                            'Opponent': player.get('opponent', '')
+                        })
+                
+                logger.info(f"Saved {len(players)} players to {player_ids_path}")
+                
+                return {
+                    "success": True,
+                    "message": f"Successfully fetched DraftKings slate with {len(players)} players",
+                    "players_count": len(players),
+                    "slate_date": slate_date,
+                    "file_saved": str(player_ids_path)
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": "No player data found in DraftKings slate",
+                    "data": slate_data
+                }
+        else:
+            return {
+                "success": False,
+                "message": "Failed to extract slate data from DraftKings",
+                "url": contest_url
+            }
+            
+    except Exception as e:
+        logger.error(f"Error fetching DraftKings slate: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch DraftKings slate: {str(e)}")
+
+
+@app.post("/api/generate/projections")
+async def generate_projections_automatically(request: Dict[str, object]) -> Dict[str, object]:
+    """Automatically generate projections and ownership using the pipeline."""
+    try:
+        slate_date = request.get("slate_date", datetime.now().strftime("%Y-%m-%d"))
+        use_firecrawl_data = request.get("use_firecrawl_data", True)
+        
+        # Import the projection pipeline
+        from pipeline.projection_pipeline import ProjectionPipeline
+        
+        # Initialize pipeline
+        pipeline = ProjectionPipeline(
+            base_dir=BASE_DIR,
+            slate_date=datetime.strptime(slate_date, "%Y-%m-%d").date()
+        )
+        
+        # Check if we have the slate data
+        dk_data_dir = BASE_DIR / "dk_data"
+        player_ids_path = dk_data_dir / "player_ids.csv"
+        
+        if not player_ids_path.exists():
+            raise HTTPException(status_code=400, detail="No DraftKings slate data found. Please fetch slate first.")
+        
+        # Generate projections using the pipeline
+        logger.info("Starting automated projection generation...")
+        
+        projections_path = dk_data_dir / "projections.csv"
+        
+        # Run the pipeline
+        results = pipeline.generate_projections(
+            slate_csv=player_ids_path,
+            slate_date=datetime.strptime(slate_date, "%Y-%m-%d").date(),
+            output_csv=projections_path
+        )
+        
+        if results:
+            logger.info(f"Generated {len(results)} projections")
+            
+            return {
+                "success": True,
+                "message": f"Successfully generated {len(results)} player projections",
+                "projections_count": len(results),
+                "slate_date": slate_date,
+                "file_saved": str(projections_path),
+                "sample_projections": results[:5] if results else []
+            }
+        else:
+            raise Exception("Pipeline returned no results")
+            
+    except Exception as e:
+        logger.error(f"Error generating projections: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate projections: {str(e)}")
+
+
+@app.post("/api/run/complete-workflow")
+async def run_complete_dfs_workflow(request: Dict[str, object]) -> Dict[str, object]:
+    """Run the complete one-click DFS workflow."""
+    try:
+        site = request.get("site", "dk")
+        slate_date = request.get("slate_date", datetime.now().strftime("%Y-%m-%d"))
+        num_lineups = request.get("num_lineups", 20)
+        sim_iterations = request.get("sim_iterations", 1000)
+        
+        workflow_steps = []
+        
+        # Step 1: Fetch DraftKings slate
+        workflow_steps.append("Fetching DraftKings slate...")
+        try:
+            slate_result = await fetch_draftkings_slate({
+                "slate_date": slate_date
+            })
+            if not slate_result["success"]:
+                raise Exception(f"Slate fetch failed: {slate_result['message']}")
+            workflow_steps.append(f"✓ Fetched slate with {slate_result['players_count']} players")
+        except Exception as e:
+            workflow_steps.append(f"✗ Slate fetch failed: {str(e)}")
+            raise e
+        
+        # Step 2: Generate projections
+        workflow_steps.append("Generating projections and ownership...")
+        try:
+            proj_result = await generate_projections_automatically({
+                "slate_date": slate_date,
+                "use_firecrawl_data": True
+            })
+            if not proj_result["success"]:
+                raise Exception(f"Projection generation failed: {proj_result['message']}")
+            workflow_steps.append(f"✓ Generated {proj_result['projections_count']} projections")
+        except Exception as e:
+            workflow_steps.append(f"✗ Projection generation failed: {str(e)}")
+            raise e
+        
+        # Step 3: Run optimizer
+        workflow_steps.append("Running lineup optimizer...")
+        try:
+            opt_result = await run_optimizer({
+                "site": site,
+                "num_lineups": num_lineups,
+                "num_uniques": 1
+            })
+            if not opt_result["success"]:
+                raise Exception(f"Optimizer failed: {opt_result['message']}")
+            workflow_steps.append(f"✓ Generated {num_lineups} optimized lineups")
+        except Exception as e:
+            workflow_steps.append(f"✗ Optimizer failed: {str(e)}")
+            raise e
+        
+        # Step 4: Run simulation
+        workflow_steps.append("Running GPP simulation...")
+        try:
+            sim_result = await run_simulation({
+                "site": site,
+                "field_size": 100,
+                "num_iterations": sim_iterations
+            })
+            if not sim_result["success"]:
+                raise Exception(f"Simulation failed: {sim_result['message']}")
+            workflow_steps.append(f"✓ Completed {sim_iterations} simulation iterations")
+        except Exception as e:
+            workflow_steps.append(f"✗ Simulation failed: {str(e)}")
+            raise e
+        
+        # Step 5: Prepare final results
+        workflow_steps.append("Preparing final lineup results...")
+        
+        # Get the latest simulation results
+        output_dir = BASE_DIR / "output"
+        lineup_files = list(output_dir.glob(f"{site}_gpp_sim_lineups_*.csv"))
+        
+        if lineup_files:
+            latest_file = max(lineup_files, key=lambda x: x.stat().st_mtime)
+            workflow_steps.append(f"✓ Results ready for download: {latest_file.name}")
+            
+            return {
+                "success": True,
+                "message": "Complete DFS workflow finished successfully!",
+                "workflow_steps": workflow_steps,
+                "results": {
+                    "slate_players": slate_result["players_count"],
+                    "projections": proj_result["projections_count"], 
+                    "optimized_lineups": num_lineups,
+                    "simulation_iterations": sim_iterations,
+                    "output_file": str(latest_file),
+                    "ready_for_upload": True
+                },
+                "next_steps": [
+                    "Download the lineup file from the link below",
+                    "Upload to DraftKings contest entry form",
+                    "Submit your lineups!"
+                ]
+            }
+        else:
+            raise Exception("No simulation output files found")
+            
+    except Exception as e:
+        logger.error(f"Complete workflow failed: {str(e)}")
+        raise HTTPException(status_code=500, detail={
+            "message": f"Workflow failed: {str(e)}",
+            "steps_completed": workflow_steps,
+            "failed_at": len(workflow_steps)
+        })
+
+
+@app.get("/api/download/lineups")
+async def download_lineups():
+    """Download the latest optimized lineups CSV file."""
+    try:
+        output_dir = BASE_DIR / "output"
+        
+        # Find the most recent lineup file
+        lineup_files = list(output_dir.glob("*_gpp_sim_lineups_*.csv"))
+        if not lineup_files:
+            # Fallback to optimizer files if simulation files don't exist
+            lineup_files = list(output_dir.glob("*_lineups_*.csv"))
+        
+        if not lineup_files:
+            raise HTTPException(status_code=404, detail="No lineup files found. Run the optimizer or simulation first.")
+        
+        # Get the most recently modified file
+        latest_file = max(lineup_files, key=lambda x: x.stat().st_mtime)
+        
+        if not latest_file.exists():
+            raise HTTPException(status_code=404, detail="Lineup file not found")
+        
+        # Return the file as a download
+        return FileResponse(
+            path=str(latest_file),
+            filename="dk-lineups.csv",
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=dk-lineups.csv"}
+        )
+        
+    except Exception as e:
+        logger.error(f"Error downloading lineups: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to download lineups: {str(e)}")
 
 
 if __name__ == "__main__":  # pragma: no cover - manual execution helper

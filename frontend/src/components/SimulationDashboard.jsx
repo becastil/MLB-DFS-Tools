@@ -69,6 +69,9 @@ const SimulationDashboard = () => {
     ownership: 0.55,
     variance: 0.4,
   });
+  const [workflowProgress, setWorkflowProgress] = useState([]);
+  const [workflowResults, setWorkflowResults] = useState(null);
+  const [showUploadInstructions, setShowUploadInstructions] = useState(false);
 
   const fetchSites = useCallback(async () => {
     try {
@@ -234,6 +237,89 @@ const SimulationDashboard = () => {
     }
   };
 
+  const handleRunCompleteWorkflow = async () => {
+    if (!selectedSite) {
+      setError('Please select a site first');
+      return;
+    }
+
+    setIsProcessing(true);
+    setError(null);
+    setWorkflowProgress([]);
+    setWorkflowResults(null);
+    setShowUploadInstructions(false);
+
+    // Get config values from inputs
+    const numLineups = document.getElementById('quick-play-lineups')?.value || 20;
+    const numIterations = document.getElementById('quick-play-iterations')?.value || 1000;
+    const contestUrl = document.getElementById('quick-play-url')?.value || '';
+
+    try {
+      setWorkflowProgress(['🚀 Starting complete workflow...']);
+
+      const response = await fetch('/api/run/complete-workflow', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          site: selectedSite,
+          num_lineups: parseInt(numLineups),
+          num_iterations: parseInt(numIterations),
+          contest_url: contestUrl,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to run complete workflow');
+      }
+
+      const result = await response.json();
+      setWorkflowResults(result);
+      setWorkflowProgress(prev => [...prev, '✓ Workflow completed successfully!']);
+      
+      // Refresh dashboard data
+      await fetchDashboard(selectedSite);
+      
+    } catch (err) {
+      console.error('Error running complete workflow:', err);
+      setError(err.message);
+      setWorkflowProgress(prev => [...prev, `✗ Error: ${err.message}`]);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleDownloadResults = async () => {
+    try {
+      const response = await fetch('/api/download/lineups', {
+        method: 'GET',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to download results');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = 'dk-lineups.csv';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error('Error downloading results:', err);
+      setError(err.message);
+    }
+  };
+
+  const handleShowUploadInstructions = () => {
+    setShowUploadInstructions(!showUploadInstructions);
+  };
+
   const compositionData = useMemo(() => {
     if (!dashboardData?.compositionChart?.length) {
       return [];
@@ -270,7 +356,7 @@ const SimulationDashboard = () => {
               </div>
 
               <nav className="flex space-x-1">
-                {['dashboard', 'simulations', 'projections', 'optimizer', 'analytics', 'web-scraper'].map((tab) => (
+                {['quick-play', 'dashboard', 'simulations', 'projections', 'optimizer', 'analytics', 'web-scraper'].map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
@@ -284,6 +370,11 @@ const SimulationDashboard = () => {
                       <div className="flex items-center space-x-2">
                         <Globe className="w-4 h-4" />
                         <span>Web Scraper</span>
+                      </div>
+                    ) : tab === 'quick-play' ? (
+                      <div className="flex items-center space-x-2">
+                        <Zap className="w-4 h-4" />
+                        <span>Quick Play</span>
                       </div>
                     ) : (
                       tab
@@ -368,6 +459,178 @@ const SimulationDashboard = () => {
       </div>
 
       <div className="p-6 space-y-6">
+        {/* Quick Play Tab */}
+        {activeTab === 'quick-play' && (
+          <div className="space-y-6">
+            <div className="bg-black/30 backdrop-blur-lg rounded-xl border border-white/10 p-6">
+              <h2 className="text-2xl font-bold text-white mb-4 flex items-center">
+                <Zap className="w-6 h-6 mr-3 text-yellow-400" />
+                One-Click DFS Lineup Generator
+              </h2>
+              <p className="text-gray-300 mb-6">
+                Automatically fetch slate data, generate projections, and create optimized lineups ready for upload to DraftKings.
+              </p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-white">Configuration</h3>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Number of Lineups</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="150"
+                      defaultValue="20"
+                      className="w-full bg-white/5 border border-white/10 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500"
+                      id="quick-play-lineups"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Simulation Iterations</label>
+                    <input
+                      type="number"
+                      min="100"
+                      max="5000"
+                      defaultValue="1000"
+                      className="w-full bg-white/5 border border-white/10 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500"
+                      id="quick-play-iterations"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Contest URL (optional)</label>
+                    <input
+                      type="url"
+                      placeholder="https://www.draftkings.com/..."
+                      className="w-full bg-white/5 border border-white/10 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500"
+                      id="quick-play-url"
+                    />
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-white">Workflow Steps</h3>
+                  <div className="space-y-3">
+                    {[
+                      "Fetch DraftKings slate data",
+                      "Generate player projections",
+                      "Create ownership estimates", 
+                      "Run lineup optimizer",
+                      "Simulate tournament results",
+                      "Prepare final CSV for upload"
+                    ].map((step, index) => (
+                      <div key={index} className="flex items-center space-x-3 text-gray-300">
+                        <div className="w-6 h-6 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center">
+                          <span className="text-xs text-indigo-400">{index + 1}</span>
+                        </div>
+                        <span className="text-sm">{step}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex flex-col space-y-4">
+                <button
+                  onClick={() => handleRunCompleteWorkflow()}
+                  disabled={isProcessing}
+                  className="w-full bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-4 rounded-lg transition-colors flex items-center justify-center text-lg font-semibold"
+                >
+                  {isProcessing ? (
+                    <>
+                      <RefreshCw className="w-5 h-5 mr-3 animate-spin" />
+                      Running Workflow...
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-5 h-5 mr-3" />
+                      Generate Lineups Now
+                    </>
+                  )}
+                </button>
+                
+                <p className="text-xs text-gray-400 text-center">
+                  This process typically takes 2-5 minutes to complete depending on slate size.
+                </p>
+              </div>
+            </div>
+            
+            {/* Progress and Results */}
+            {workflowProgress && workflowProgress.length > 0 && (
+              <div className="bg-black/30 backdrop-blur-lg rounded-xl border border-white/10 p-6">
+                <h3 className="text-xl font-bold text-white mb-4">Workflow Progress</h3>
+                <div className="space-y-2">
+                  {workflowProgress.map((step, index) => (
+                    <div key={index} className={`text-sm ${step.startsWith('✓') ? 'text-green-400' : step.startsWith('✗') ? 'text-red-400' : 'text-gray-300'}`}>
+                      {step}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {workflowResults && (
+              <div className="bg-black/30 backdrop-blur-lg rounded-xl border border-white/10 p-6">
+                <h3 className="text-xl font-bold text-white mb-4 flex items-center">
+                  <Download className="w-5 h-5 mr-2 text-green-400" />
+                  Results Ready!
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-indigo-400">{workflowResults.slate_players}</div>
+                    <div className="text-sm text-gray-400">Players</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-400">{workflowResults.projections}</div>
+                    <div className="text-sm text-gray-400">Projections</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-purple-400">{workflowResults.optimized_lineups}</div>
+                    <div className="text-sm text-gray-400">Lineups</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-orange-400">{workflowResults.simulation_iterations}</div>
+                    <div className="text-sm text-gray-400">Iterations</div>
+                  </div>
+                </div>
+                
+                <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
+                  <button
+                    onClick={() => handleDownloadResults()}
+                    className="flex-1 bg-green-500 hover:bg-green-600 text-white px-4 py-3 rounded-lg transition-colors flex items-center justify-center font-semibold"
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Download Lineups CSV
+                  </button>
+                  
+                  <button
+                    onClick={() => handleShowUploadInstructions()}
+                    className="flex-1 bg-blue-500 hover:bg-blue-600 text-white px-4 py-3 rounded-lg transition-colors flex items-center justify-center font-semibold"
+                  >
+                    <Upload className="w-4 h-4 mr-2" />
+                    Upload Instructions
+                  </button>
+                </div>
+                
+                {showUploadInstructions && (
+                  <div className="mt-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                    <h4 className="font-semibold text-blue-400 mb-2">How to Upload to DraftKings:</h4>
+                    <ol className="text-sm text-gray-300 space-y-1">
+                      <li>1. Download the CSV file above</li>
+                      <li>2. Go to your DraftKings contest</li>
+                      <li>3. Click "Enter Multiple Lineups"</li>
+                      <li>4. Upload the CSV file</li>
+                      <li>5. Review and submit your entries</li>
+                    </ol>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Web Scraper Tab */}
         {activeTab === 'web-scraper' && (
           <FirecrawlPanel />
