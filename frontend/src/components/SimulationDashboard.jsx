@@ -152,6 +152,88 @@ const SimulationDashboard = () => {
     setIsRefreshing(false);
   };
 
+  const handleRunOptimizer = async () => {
+    if (!selectedSite) {
+      setError('Please select a site first');
+      return;
+    }
+
+    setIsProcessing(true);
+    setError(null);
+    
+    try {
+      const response = await fetch('/api/run/optimizer', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          site: selectedSite,
+          num_lineups: 20,
+          num_uniques: 1,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to run optimizer');
+      }
+
+      const result = await response.json();
+      console.log('Optimizer result:', result);
+      
+      // Refresh dashboard data after optimizer completes
+      await fetchDashboard(selectedSite);
+      
+    } catch (err) {
+      console.error('Error running optimizer:', err);
+      setError(err.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleRunSimulation = async () => {
+    if (!selectedSite) {
+      setError('Please select a site first');
+      return;
+    }
+
+    setIsProcessing(true);
+    setError(null);
+    
+    try {
+      const response = await fetch('/api/run/simulation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          site: selectedSite,
+          field_size: 100,
+          num_iterations: 1000,
+          use_contest_data: false,
+          use_file_upload: false,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to run simulation');
+      }
+
+      const result = await response.json();
+      console.log('Simulation result:', result);
+      
+      // Refresh dashboard data after simulation completes
+      await fetchDashboard(selectedSite);
+      
+    } catch (err) {
+      console.error('Error running simulation:', err);
+      setError(err.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const compositionData = useMemo(() => {
     if (!dashboardData?.compositionChart?.length) {
       return [];
@@ -291,8 +373,166 @@ const SimulationDashboard = () => {
           <FirecrawlPanel />
         )}
 
-        {/* Other tabs content */}
-        {activeTab !== 'web-scraper' && (
+        {/* Optimizer Tab */}
+        {activeTab === 'optimizer' && (
+          <div className="space-y-6">
+            <div className="bg-black/30 backdrop-blur-lg rounded-xl border border-white/10 p-6">
+              <h2 className="text-xl font-bold text-white mb-4 flex items-center">
+                <Target className="w-5 h-5 mr-2 text-indigo-400" />
+                Lineup Optimizer
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Number of Lineups</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="500"
+                    defaultValue="20"
+                    className="w-full bg-white/5 border border-white/10 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Unique Players</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="9"
+                    defaultValue="1"
+                    className="w-full bg-white/5 border border-white/10 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button
+                    onClick={() => handleRunOptimizer()}
+                    disabled={isProcessing}
+                    className="w-full bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center"
+                  >
+                    {isProcessing ? (
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Target className="w-4 h-4 mr-2" />
+                    )}
+                    {isProcessing ? 'Running...' : 'Run Optimizer'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Simulations Tab */}
+        {activeTab === 'simulations' && (
+          <div className="space-y-6">
+            <div className="bg-black/30 backdrop-blur-lg rounded-xl border border-white/10 p-6">
+              <h2 className="text-xl font-bold text-white mb-4 flex items-center">
+                <Activity className="w-5 h-5 mr-2 text-green-400" />
+                GPP Simulator
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Field Size</label>
+                  <input
+                    type="number"
+                    min="10"
+                    max="10000"
+                    defaultValue="100"
+                    className="w-full bg-white/5 border border-white/10 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Iterations</label>
+                  <input
+                    type="number"
+                    min="100"
+                    max="10000"
+                    defaultValue="1000"
+                    className="w-full bg-white/5 border border-white/10 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button
+                    onClick={() => handleRunSimulation()}
+                    disabled={isProcessing}
+                    className="w-full bg-green-500 hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center"
+                  >
+                    {isProcessing ? (
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Activity className="w-4 h-4 mr-2" />
+                    )}
+                    {isProcessing ? 'Running...' : 'Run Simulation'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Projections Tab */}
+        {activeTab === 'projections' && (
+          <div className="space-y-6">
+            <div className="bg-black/30 backdrop-blur-lg rounded-xl border border-white/10 p-6">
+              <h2 className="text-xl font-bold text-white mb-4 flex items-center">
+                <TrendingUp className="w-5 h-5 mr-2 text-blue-400" />
+                Player Projections
+              </h2>
+              {dashboardData?.projectionSample?.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/10">
+                        <th className="text-left py-2 text-gray-300">Player</th>
+                        <th className="text-left py-2 text-gray-300">Team</th>
+                        <th className="text-left py-2 text-gray-300">Position</th>
+                        <th className="text-left py-2 text-gray-300">FPTS</th>
+                        <th className="text-left py-2 text-gray-300">Own%</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dashboardData.projectionSample.map((player, idx) => (
+                        <tr key={idx} className="border-b border-white/5">
+                          <td className="py-2 text-white">{player.name}</td>
+                          <td className="py-2 text-gray-300">{player.team}</td>
+                          <td className="py-2 text-gray-300">{player.pos}</td>
+                          <td className="py-2 text-indigo-400">{player.fpts}</td>
+                          <td className="py-2 text-green-400">{player['own%']}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-gray-400">No projection data available. Upload a projections file to get started.</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Analytics Tab */}
+        {activeTab === 'analytics' && (
+          <div className="space-y-6">
+            <div className="bg-black/30 backdrop-blur-lg rounded-xl border border-white/10 p-6">
+              <h2 className="text-xl font-bold text-white mb-4 flex items-center">
+                <Brain className="w-5 h-5 mr-2 text-purple-400" />
+                Analytics & Insights
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-white/5 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-white mb-2">Performance Trends</h3>
+                  <p className="text-gray-400 text-sm">Track lineup performance over time and identify optimization patterns.</p>
+                </div>
+                <div className="bg-white/5 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-white mb-2">Correlation Analysis</h3>
+                  <p className="text-gray-400 text-sm">Analyze player correlations and stack effectiveness.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Dashboard Tab - Original Content */}
+        {activeTab === 'dashboard' && (
           <>
             {loading && (
               <div className="flex items-center justify-center bg-black/30 border border-white/10 rounded-xl py-12">

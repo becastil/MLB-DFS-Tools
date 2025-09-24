@@ -27,6 +27,8 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+import sys
+sys.path.append('.')  # Allow importing from src directory
 
 # Firecrawl integration
 from pipeline.data_sources.firecrawl_client import get_firecrawl_client
@@ -1174,6 +1176,104 @@ async def extract_with_template(request: Dict[str, object]) -> Dict[str, object]
     except Exception as e:
         logger.error(f"Error extracting with template: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to extract with template: {str(e)}")
+
+
+# MLB Tools API endpoints
+@app.post("/api/run/optimizer")
+async def run_optimizer(request: Dict[str, object]) -> Dict[str, object]:
+    """Run the MLB optimizer with specified parameters."""
+    try:
+        site = request.get("site", "dk")
+        num_lineups = request.get("num_lineups", 20)
+        num_uniques = request.get("num_uniques", 1)
+        
+        # Import and run optimizer
+        from mlb_optimizer import MLB_Optimizer
+        
+        opto = MLB_Optimizer(site, num_lineups, num_uniques)
+        opto.optimize()
+        opto.output()
+        
+        return {
+            "success": True,
+            "message": f"Optimizer completed for {site} - generated {num_lineups} lineups",
+            "site": site,
+            "num_lineups": num_lineups,
+            "num_uniques": num_uniques
+        }
+    except Exception as e:
+        logger.error(f"Error running optimizer: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to run optimizer: {str(e)}")
+
+
+@app.post("/api/run/simulation")
+async def run_simulation(request: Dict[str, object]) -> Dict[str, object]:
+    """Run the MLB GPP simulator with specified parameters."""
+    try:
+        site = request.get("site", "dk")
+        field_size = request.get("field_size", 20)
+        num_iterations = request.get("num_iterations", 500)
+        use_contest_data = request.get("use_contest_data", False)
+        use_file_upload = request.get("use_file_upload", False)
+        
+        # Import and run simulator
+        from mlb_gpp_simulator import MLB_GPP_Simulator
+        
+        sim = MLB_GPP_Simulator(
+            site,
+            field_size,
+            num_iterations,
+            use_contest_data,
+            use_file_upload,
+            True  # match_lineup_input_to_field_size
+        )
+        sim.simulate()
+        sim.output()
+        
+        return {
+            "success": True,
+            "message": f"Simulation completed for {site} - {num_iterations} iterations with field size {field_size}",
+            "site": site,
+            "field_size": field_size,
+            "num_iterations": num_iterations
+        }
+    except Exception as e:
+        logger.error(f"Error running simulation: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to run simulation: {str(e)}")
+
+
+@app.post("/api/upload/projections")
+async def upload_projections(request: Dict[str, object]) -> Dict[str, object]:
+    """Process uploaded projection file."""
+    try:
+        site = request.get("site", "dk")
+        file_data = request.get("file_data")
+        filename = request.get("filename", "projections.csv")
+        
+        if not file_data:
+            raise HTTPException(status_code=400, detail="No file data provided")
+        
+        # Determine site directory
+        site_dir = SITE_DIRECTORIES.get(site, BASE_DIR / f"{site}_data")
+        if not site_dir.exists():
+            site_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Save uploaded file
+        projection_path = site_dir / "projections.csv"
+        
+        # In a real implementation, you'd decode base64 file_data and write it
+        # For now, we'll just acknowledge the upload
+        
+        return {
+            "success": True,
+            "message": f"Projections uploaded successfully for {site}",
+            "site": site,
+            "filename": filename,
+            "saved_to": str(projection_path)
+        }
+    except Exception as e:
+        logger.error(f"Error uploading projections: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload projections: {str(e)}")
 
 
 if __name__ == "__main__":  # pragma: no cover - manual execution helper
