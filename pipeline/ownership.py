@@ -2,16 +2,21 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from datetime import date
+from typing import Optional
+from .contextual_aggregator import ContextualDataAggregator
 
 
 class OwnershipEstimator:
     """Heuristic ownership estimator driven by projection value, lineup spot, and betting context."""
 
-    def __init__(self, hitter_slots: int = 8, pitcher_slots: int = 2) -> None:
+    def __init__(self, hitter_slots: int = 8, pitcher_slots: int = 2, 
+                 contextual_aggregator: Optional[ContextualDataAggregator] = None) -> None:
         self.hitter_slots = hitter_slots
         self.pitcher_slots = pitcher_slots
+        self.contextual_aggregator = contextual_aggregator
 
-    def estimate(self, projections: pd.DataFrame) -> pd.DataFrame:
+    def estimate(self, projections: pd.DataFrame, slate_date: Optional[date] = None) -> pd.DataFrame:
         if projections.empty:
             projections["ownership"] = []
             return projections
@@ -23,6 +28,11 @@ class OwnershipEstimator:
         pitchers = self._estimate_pitchers(pitchers)
 
         combined = pd.concat([hitters, pitchers], axis=0, ignore_index=True)
+        
+        # Apply contextual ownership adjustments if available
+        if self.contextual_aggregator and slate_date:
+            combined = self._apply_contextual_ownership_adjustments(combined, slate_date)
+        
         return combined.sort_values("player_name")
 
     def _estimate_hitters(self, hitters: pd.DataFrame) -> pd.DataFrame:
@@ -106,3 +116,39 @@ class OwnershipEstimator:
         if line < 0:
             return (-line) / ((-line) + 100)
         return 100 / (line + 100)
+    
+    def _apply_contextual_ownership_adjustments(self, ownership_df: pd.DataFrame, slate_date: date) -> pd.DataFrame:
+        """Apply contextual adjustments to ownership estimates using Firecrawl data."""
+        try:
+            # Get contextual ownership adjustments
+            adjusted_ownership = self.contextual_aggregator.calculate_ownership_adjustments(
+                ownership_df, slate_date
+            )
+            
+            # Log significant ownership adjustments
+            original_total = ownership_df['ownership'].sum()
+            adjusted_total = adjusted_ownership['ownership'].sum()
+            
+            if abs(adjusted_total - original_total) > 0.01:  # If total ownership changed
+                print(f"Applied contextual ownership adjustments (total: {original_total:.1f} -> {adjusted_total:.1f})")
+                
+                # Show top ownership changes
+                ownership_changes = adjusted_ownership.copy()
+                ownership_changes['ownership_change'] = (
+                    adjusted_ownership['ownership'] / ownership_df['ownership'] - 1.0
+                ).fillna(0.0)
+                
+                significant_changes = ownership_changes[
+                    abs(ownership_changes['ownership_change']) > 0.2
+                ].nlargest(5, 'ownership_change')
+                
+                for _, player in significant_changes.iterrows():
+                    change_pct = player['ownership_change'] * 100
+                    reason = player.get('ownership_reason', 'Contextual factors')
+                    print(f"  {player['player_name']}: {change_pct:+.1f}% ({reason})")
+            
+            return adjusted_ownership
+            
+        except Exception as e:
+            print(f"Warning: Could not apply contextual ownership adjustments: {e}")
+            return ownership_df

@@ -19,6 +19,7 @@ from .data_sources.statcast_client import StatcastDataFetcher  # retained for op
 from .features import FeatureEngineer, FeatureSets
 from .modeling import ProjectionModeler
 from .ownership import OwnershipEstimator
+from .contextual_aggregator import ContextualDataAggregator
 
 
 @dataclass
@@ -67,7 +68,8 @@ class ProjectionPipeline:
         self.rotowire_fetcher = RotoWireLineupFetcher(self.raw_dir / "rotowire")
         self.statcast_fetcher = StatcastDataFetcher(self.raw_dir / "statcast", chunk_size=chunk_size)
         self.modeler = ProjectionModeler(self.model_dir)
-        self.ownership_estimator = OwnershipEstimator()
+        self.contextual_aggregator = ContextualDataAggregator(self.raw_dir / "contextual")
+        self.ownership_estimator = OwnershipEstimator(contextual_aggregator=self.contextual_aggregator)
 
         self._feature_sets: Optional[FeatureSets] = None
 
@@ -126,6 +128,7 @@ class ProjectionPipeline:
         slate_date: date,
         output_csv: Optional[Path | str] = None,
         template_csv: Optional[Path | str] = None,
+        use_contextual_data: bool = True,
     ) -> tuple[pd.DataFrame, Optional[pd.DataFrame]]:
         features_hitters, features_pitchers = self._load_feature_tables()
         hitter_store = self._latest_feature_store(features_hitters)
@@ -203,7 +206,12 @@ class ProjectionPipeline:
             )
 
         output = pd.DataFrame([pr.__dict__ for pr in projections])
-        output = self.ownership_estimator.estimate(output)
+        
+        # Apply contextual adjustments if enabled
+        if use_contextual_data:
+            output = self._apply_contextual_adjustments(output, slate_date)
+        
+        output = self.ownership_estimator.estimate(output, slate_date)
 
         template_df: Optional[pd.DataFrame] = None
         if template_csv:
@@ -346,6 +354,32 @@ class ProjectionPipeline:
         if not hitters_path.exists() or not pitchers_path.exists():
             raise FileNotFoundError("Feature tables not found. Run training first.")
         return pd.read_parquet(hitters_path), pd.read_parquet(pitchers_path)
+    
+    def _apply_contextual_adjustments(self, projections: pd.DataFrame, slate_date: date) -> pd.DataFrame:
+        """Apply contextual adjustments to base projections using Firecrawl data."""
+        try:
+            # Get contextual adjustments
+            adjusted_projections = self.contextual_aggregator.calculate_projection_adjustments(
+                projections, slate_date
+            )
+            
+            # Log adjustment summary
+            if 'adjustment_factor' in adjusted_projections.columns:
+                significant_adjustments = adjusted_projections[
+                    abs(adjusted_projections['adjustment_factor'] - 1.0) > 0.1
+                ]
+                if not significant_adjustments.empty:
+                    print(f"Applied contextual adjustments to {len(significant_adjustments)} players")
+                    for _, player in significant_adjustments.head(5).iterrows():
+                        factor = player.get('adjustment_factor', 1.0)
+                        reasons = player.get('contextual_adjustments', 'Unknown')
+                        print(f"  {player['player_name']}: {factor:.3f}x ({reasons})")
+            
+            return adjusted_projections
+            
+        except Exception as e:
+            print(f"Warning: Could not apply contextual adjustments: {e}")
+            return projections
 
     @staticmethod
     def _latest_feature_store(features: pd.DataFrame) -> pd.DataFrame:

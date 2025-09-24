@@ -33,6 +33,19 @@ class FirecrawlClient:
             )
         
         self.app = FirecrawlApp(api_key=self.api_key)
+        
+        # Cache settings for real-time data refresh
+        self.cache_ttl_minutes = {
+            'dfs_contextual': 60,  # 1 hour for comprehensive contextual data
+            'ownership_factors': 30,  # 30 minutes for ownership factors
+            'market_intelligence': 15,  # 15 minutes for market data
+            'injury_reports': 120,  # 2 hours for injury reports  
+            'weather_data': 45,  # 45 minutes for weather
+        }
+        
+        # Cache directory for storing extraction results
+        self.cache_dir = Path.cwd() / '.firecrawl_cache'
+        self.cache_dir.mkdir(exist_ok=True)
     
     def scrape_url(self, url: str, **kwargs) -> Dict[str, Any]:
         """
@@ -547,8 +560,224 @@ class FirecrawlClient:
             schema=schema,
             enable_web_search=True
         )
+    
+    def extract_with_cache(self, urls: List[str], prompt: Optional[str] = None,
+                          schema: Optional[Dict[str, Any]] = None,
+                          cache_key: str = 'default',
+                          force_refresh: bool = False,
+                          **kwargs) -> Dict[str, Any]:
+        """
+        Extract data with intelligent caching and refresh logic.
+        
+        Args:
+            urls: List of URLs to extract from
+            prompt: Extraction prompt
+            schema: JSON schema for extraction
+            cache_key: Key for cache storage (determines TTL)
+            force_refresh: Force refresh even if cache is valid
+            **kwargs: Additional extraction parameters
+            
+        Returns:
+            Dict containing extracted data (from cache or fresh extraction)
+        """
+        import json
+        import hashlib
+        from datetime import datetime, timedelta
+        
+        # Generate cache filename based on parameters
+        cache_params = {
+            'urls': sorted(urls),
+            'prompt': prompt,
+            'cache_key': cache_key
+        }
+        cache_hash = hashlib.md5(json.dumps(cache_params, sort_keys=True).encode()).hexdigest()[:12]
+        cache_file = self.cache_dir / f"{cache_key}_{cache_hash}.json"
+        
+        # Check if cached data is still valid
+        if not force_refresh and cache_file.exists():
+            try:
+                with open(cache_file, 'r') as f:
+                    cached = json.load(f)
+                
+                cached_time = datetime.fromisoformat(cached['timestamp'])
+                ttl_minutes = self.cache_ttl_minutes.get(cache_key, 60)
+                expires_at = cached_time + timedelta(minutes=ttl_minutes)
+                
+                if datetime.now() < expires_at:
+                    logger.info(f"Using cached data for {cache_key} (expires in {(expires_at - datetime.now()).total_seconds() / 60:.1f} min)")
+                    return cached['data']
+                else:
+                    logger.info(f"Cache expired for {cache_key}, refreshing...")
+            except Exception as e:
+                logger.warning(f"Error reading cache file: {e}")
+        
+        # Extract fresh data
+        logger.info(f"Extracting fresh data for {cache_key}")
+        try:
+            data = self.extract(urls=urls, prompt=prompt, schema=schema, **kwargs)
+            
+            # Cache the results
+            cache_data = {
+                'timestamp': datetime.now().isoformat(),
+                'cache_key': cache_key,
+                'urls': urls,
+                'data': data
+            }
+            
+            with open(cache_file, 'w') as f:
+                json.dump(cache_data, f, indent=2)
+            
+            logger.info(f"Cached extraction results for {cache_key}")
+            return data
+            
+        except Exception as e:
+            # If extraction fails, try to return stale cache data
+            if cache_file.exists():
+                try:
+                    with open(cache_file, 'r') as f:
+                        cached = json.load(f)
+                    logger.warning(f"Extraction failed, using stale cache for {cache_key}: {e}")
+                    return cached['data']
+                except:
+                    pass
+            raise
+    
+    def clear_cache(self, cache_key: Optional[str] = None) -> None:
+        """
+        Clear cached data.
+        
+        Args:
+            cache_key: Specific cache key to clear. If None, clears all cache.
+        """
+        if cache_key is None:
+            # Clear all cache files
+            for cache_file in self.cache_dir.glob("*.json"):
+                cache_file.unlink()
+            logger.info("Cleared all Firecrawl cache")
+        else:
+            # Clear specific cache key
+            for cache_file in self.cache_dir.glob(f"{cache_key}_*.json"):
+                cache_file.unlink()
+            logger.info(f"Cleared cache for {cache_key}")
+    
+    def get_cache_status(self) -> List[Dict[str, Any]]:
+        """
+        Get status of all cached data.
+        
+        Returns:
+            List of cache status information
+        """
+        import json
+        from datetime import datetime, timedelta
+        
+        cache_status = []
+        
+        for cache_file in self.cache_dir.glob("*.json"):
+            try:
+                with open(cache_file, 'r') as f:
+                    cached = json.load(f)
+                
+                cached_time = datetime.fromisoformat(cached['timestamp'])
+                cache_key = cached.get('cache_key', 'unknown')
+                ttl_minutes = self.cache_ttl_minutes.get(cache_key, 60)
+                expires_at = cached_time + timedelta(minutes=ttl_minutes)
+                
+                status = {
+                    'cache_key': cache_key,
+                    'cached_at': cached_time.strftime('%Y-%m-%d %H:%M:%S'),
+                    'expires_at': expires_at.strftime('%Y-%m-%d %H:%M:%S'),
+                    'is_valid': datetime.now() < expires_at,
+                    'ttl_minutes': ttl_minutes,
+                    'file_size_kb': cache_file.stat().st_size / 1024
+                }
+                
+                cache_status.append(status)
+                
+            except Exception as e:
+                logger.warning(f"Error reading cache file {cache_file}: {e}")
+        
+        return sorted(cache_status, key=lambda x: x['cached_at'], reverse=True)
 
 
 def get_firecrawl_client() -> FirecrawlClient:
     """Get a configured Firecrawl client instance."""
     return FirecrawlClient()
+
+# Enhanced extraction method for DFS contextual data
+def extract_dfs_contextual_data(urls: list[str], api_key: str = None) -> dict:
+    """
+    Extract comprehensive DFS contextual data using the user's schema pattern.
+    
+    This function implements the pattern from the user's example:
+    from firecrawl import Firecrawl
+    from pydantic import BaseModel, Field
+    
+    Args:
+        urls: List of URLs to extract from (supports wildcards)
+        api_key: Firecrawl API key (uses environment variable if not provided)
+    
+    Returns:
+        Dictionary containing extracted DFS data
+    """
+    try:
+        from firecrawl import Firecrawl
+        from pydantic import BaseModel, Field
+    except ImportError:
+        raise ImportError("firecrawl library not available. Install with: pip install firecrawl-py")
+    
+    # Use provided API key or fallback to environment/default
+    if api_key:
+        app = Firecrawl(api_key=api_key)
+    else:
+        # Try to get from environment, fallback to user's example key
+        import os
+        key = os.getenv('FIRECRAWL_API_KEY', 'fc-dd26161f85a847298e92cc4064770984')
+        app = Firecrawl(api_key=key)
+    
+    # Define extraction schema based on user's pattern
+    class ExtractSchema(BaseModel):
+        hitters: list = Field(description="The hitters with current form, matchups, and advanced metrics")
+        pitchers: list = Field(description="The pitchers with recent performance and opponent analysis") 
+        contextual_data: any = Field(description="Weather, park factors, betting lines, and environmental context")
+        team_level_stats: any = Field(description="Team implied runs, bullpen strength, and stack correlation")
+    
+    # Enhanced prompt for comprehensive DFS data
+    prompt = """Extract comprehensive data relevant to daily fantasy sports projections for MLB hitters and pitchers. Include:
+
+    HITTERS:
+    - Current batting order and lineup status
+    - Recent form over last 15 games (hot/cold streaks)
+    - Matchup analysis vs pitcher handedness  
+    - Advanced metrics: wRC+, xwOBA, hard-hit rate, barrel rate
+    - Park factors and weather impact on offensive environment
+    - Lineup protection and RBI opportunities
+
+    PITCHERS:
+    - Recent form and pitch efficiency trends
+    - Opponent offensive strength and difficulty rating
+    - Expected pitch count and innings projection
+    - Advanced metrics: FIP, xFIP, K-BB%, CSW rate
+    - Bullpen support quality and win probability
+
+    CONTEXTUAL DATA:
+    - Weather conditions affecting scoring (wind, temperature, humidity)
+    - Betting lines, totals, and implied run environments
+    - Line movement and sharp money indicators
+    - Park factors and historical scoring rates
+
+    TEAM LEVEL STATS:
+    - Implied run totals and win probability
+    - Bullpen usage patterns and availability  
+    - Stack correlation opportunities
+    - Recent offensive and defensive form
+
+    Structure the data to support generating projections with ceiling/floor outcomes and ownership estimates for DFS tournaments and cash games."""
+    
+    # Perform the extraction using user's pattern
+    data = app.extract(
+        urls=urls,
+        prompt=prompt,
+        schema=ExtractSchema.model_json_schema()
+    )
+    
+    return data
