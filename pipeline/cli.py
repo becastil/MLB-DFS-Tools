@@ -123,6 +123,33 @@ def build_parser() -> argparse.ArgumentParser:
         help="Force the workflow to rely on bundled sample data instead of Firecrawl calls."
     )
 
+    search_parser = subparsers.add_parser(
+        "firecrawl-search",
+        help="Execute a Firecrawl search query and print the results"
+    )
+    search_parser.add_argument("query", help="Search query string")
+    search_parser.add_argument(
+        "--limit",
+        type=int,
+        default=5,
+        help="Maximum number of search hits to return (default: 5)."
+    )
+    search_parser.add_argument(
+        "--include-content",
+        action="store_true",
+        help="Ask Firecrawl to fetch page content for each hit (uses more credits)."
+    )
+    search_parser.add_argument(
+        "--use-sample",
+        action="store_true",
+        help="Return the bundled sample payload instead of calling Firecrawl."
+    )
+    search_parser.add_argument(
+        "--output",
+        type=Path,
+        help="Optional JSON destination for the raw search payload."
+    )
+
     return parser
 
 
@@ -185,6 +212,33 @@ def main(argv: list[str] | None = None) -> None:
             f"Prepared Firecrawl dataset for {len(result)} players. "
             f"Saved to {args.output}."
         )
+    elif args.command == "firecrawl-search":
+        from .firecrawl_search import run_firecrawl_search
+
+        payload = run_firecrawl_search(
+            query=args.query,
+            limit=args.limit,
+            include_content=args.include_content,
+            use_sample=args.use_sample,
+            output_path=args.output,
+        )
+        results = payload.get("results", [])
+        if not results:
+            print("No search results returned.")
+        else:
+            for index, item in enumerate(results, start=1):
+                title = item.get("title") or item.get("url")
+                print(f"[{index}] {title}")
+                print(f"    URL: {item.get('url')}")
+                if item.get("snippet"):
+                    print(f"    Snippet: {item['snippet']}")
+                if args.include_content and item.get("content"):
+                    preview = str(item["content"]).strip()
+                    if len(preview) > 200:
+                        preview = preview[:200] + "..."
+                    print(f"    Content Preview: {preview}")
+            if args.output:
+                print(f"Raw payload saved to {args.output}")
     else:
         parser.error("Unknown command")
 

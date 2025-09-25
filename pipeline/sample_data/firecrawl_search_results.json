@@ -1,0 +1,22 @@
+{
+  "results": [
+    {
+      "title": "FanGraphs Leaders: 2024 Season Overview",
+      "url": "https://www.fangraphs.com/leaders.aspx?pos=all&stats=bat",
+      "snippet": "Comprehensive batting leaderboard for the 2024 MLB season with wOBA, ISO, and PA filters.",
+      "content": null
+    },
+    {
+      "title": "Rotowire MLB Injury Report",
+      "url": "https://www.rotowire.com/baseball/injuries.php",
+      "snippet": "Daily injury updates and status changes across Major League Baseball rosters.",
+      "content": null
+    },
+    {
+      "title": "Scores and Odds MLB Lines",
+      "url": "https://www.scoresandodds.com/mlb",
+      "snippet": "Moneylines, run lines, and totals for today's MLB slate with live movement charts.",
+      "content": null
+    }
+  ]
+}

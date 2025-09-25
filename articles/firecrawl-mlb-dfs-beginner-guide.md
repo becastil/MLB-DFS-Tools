@@ -241,6 +241,26 @@ Return JSON only.
 
 Reuse the same context to ask the model for 2 to 3 bullet points summarizing the player's recent form, injury news, or matchup outlook.
 
+### 6.4 Using Firecrawl Search to Discover URLs
+
+Firecrawl Search removes guesswork when you are unsure which pages to crawl. Trigger it from the CLI:
+
+```bash
+python -m pipeline.cli firecrawl-search "MLB DFS injury report" --limit 5
+```
+
+Or call it directly in Python with the helper added in `pipeline/firecrawl_search.py`:
+
+```python
+from pipeline.firecrawl_search import run_firecrawl_search
+
+payload = run_firecrawl_search("2025 MLB wOBA leaderboard", limit=3)
+for result in payload.get("results", []):
+    print(result["title"], result["url"])
+```
+
+Each result includes structured metadata (title, snippet, URL) and, when `include_content=True`, the page body so you can immediately pass it to downstream extraction prompts.
+
 ## 7. Toy Projection and Ownership Formulas
 
 ### 7.1 Hitter Projection Skeleton
@@ -434,4 +454,3 @@ CREATE TABLE projections (
 8. Next.js environment variable guide: https://nextjs.org/docs/pages/guides/environment-variables
 9. Rotogrinders' analysis on implied totals: https://rotogrinders.com/articles/mlb-dfs-how-accurate-are-vegas-implied-totals-1967459
 10. Robots.txt etiquette: https://www.promptcloud.com/blog/how-to-read-and-respect-robots-file
-

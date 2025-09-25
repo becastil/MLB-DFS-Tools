@@ -130,6 +130,35 @@ class FirecrawlClient:
         }
         
         return self.scrape_url(url, **scrape_params)
+
+    def search_web(self, query: str, limit: int = 5, include_content: bool = False,
+                   **kwargs) -> Dict[str, Any]:
+        """Leverage Firecrawl's search feature to discover relevant URLs.
+
+        Args:
+            query: Natural language search query.
+            limit: Maximum number of search hits to return.
+            include_content: Whether to ask Firecrawl to fetch the page content for
+                each hit (can increase latency and credit usage).
+            **kwargs: Additional parameters forwarded to the Firecrawl search API.
+
+        Returns:
+            Dict describing the search results, including URLs and optional snippets.
+        """
+
+        try:
+            logger.info("Searching the web for query: %s", query)
+            response = self.app.search(
+                query=query,
+                limit=limit,
+                include_content=include_content,
+                **kwargs,
+            )
+            logger.info("Search returned %d results", len(response.get("results", [])))
+            return response
+        except Exception as exc:
+            logger.error("Firecrawl search failed for '%s': %s", query, exc)
+            raise
     
     def scrape_injury_report(self, url: str) -> Dict[str, Any]:
         """
