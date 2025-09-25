@@ -38,6 +38,7 @@ import {
   AlertTriangle,
   Database,
   Globe,
+  Info,
 } from 'lucide-react';
 import FirecrawlPanel from './FirecrawlPanel';
 import ModelToggle from './ModelToggle';
@@ -51,11 +52,102 @@ const metricIcons = {
   'Avg. Win %': Users,
 };
 
+const fallbackSites = ['draftkings', 'fanduel'];
+
+const dummyDashboardData = {
+  metrics: [
+    { label: 'Total Projections', value: '150' },
+    { label: 'Sim Iterations', value: '1,200' },
+    { label: 'Optimized Lineups', value: '40' },
+    { label: 'Avg. Win %', value: '17.8%' },
+  ],
+  quickStats: [
+    { label: 'Slate Size', value: '9 Games' },
+    { label: 'Stacks Tested', value: '25' },
+    { label: 'Pitchers Simulated', value: '18' },
+    { label: 'Average Salary Used', value: '$49,700' },
+  ],
+  lastUpdated: {
+    projections: 'Today • 2:05 PM ET',
+    simulations: 'Today • 1:45 PM ET',
+    optimizer: 'Today • 1:50 PM ET',
+  },
+  files: {
+    simulation: 'simulated_lineups.csv',
+    projections: 'latest_projections.csv',
+  },
+  performanceChart: [
+    { label: 'Lineup 1', projection: 112.4, ceiling: 142.1, winRate: 18.2 },
+    { label: 'Lineup 2', projection: 109.8, ceiling: 136.4, winRate: 16.9 },
+    { label: 'Lineup 3', projection: 114.2, ceiling: 144.7, winRate: 19.5 },
+    { label: 'Lineup 4', projection: 111.1, ceiling: 138.2, winRate: 17.3 },
+  ],
+  ownershipChart: [
+    { player: 'Shohei Ohtani', projected: 24, simulated: 18 },
+    { player: 'Mookie Betts', projected: 19, simulated: 15 },
+    { player: 'Juan Soto', projected: 17, simulated: 22 },
+    { player: 'Spencer Strider', projected: 32, simulated: 35 },
+  ],
+  compositionChart: [
+    { name: '5-3 Stacks', value: 42 },
+    { name: '4-4 Stacks', value: 28 },
+    { name: '4-3-1 Stacks', value: 18 },
+    { name: 'One-offs', value: 12 },
+  ],
+  radarChart: [
+    { metric: 'Ceiling', myLineups: 88, topLineups: 82 },
+    { metric: 'Floor', myLineups: 74, topLineups: 71 },
+    { metric: 'Ownership', myLineups: 62, topLineups: 55 },
+    { metric: 'Correlation', myLineups: 81, topLineups: 77 },
+    { metric: 'Upside', myLineups: 86, topLineups: 79 },
+  ],
+  contestTable: [
+    { name: '$15 MLB Relay Throw', entries: 22536, topScore: 191.4, avgScore: 156.9, roi: 18.6, avgReturn: 285.3 },
+    { name: '$4 Mini-MAX', entries: 11820, topScore: 178.2, avgScore: 149.5, roi: 13.1, avgReturn: 124.6 },
+  ],
+  lineupPreview: [
+    {
+      lineup: ['P Spencer Strider', 'C Will Smith', '1B Freddie Freeman', '2B Ozzie Albies', '3B Austin Riley', 'SS Francisco Lindor', 'OF Shohei Ohtani', 'OF Ronald Acuna Jr.', 'OF Jarred Kelenic'],
+      winPct: 18.4,
+      projection: 132.7,
+      roi: 16.2,
+    },
+    {
+      lineup: ['P Logan Webb', 'C Adley Rutschman', '1B Matt Olson', '2B Ketel Marte', '3B Max Muncy', 'SS Trea Turner', 'OF Aaron Judge', 'OF Julio Rodriguez', 'OF Corbin Carroll'],
+      winPct: 16.7,
+      projection: 129.3,
+      roi: 14.8,
+    },
+    {
+      lineup: ['P Pablo Lopez', 'C Cal Raleigh', '1B Pete Alonso', '2B Gleyber Torres', '3B Jose Ramirez', 'SS Elly De La Cruz', 'OF Kyle Schwarber', 'OF Jarren Duran', 'OF Byron Buxton'],
+      winPct: 15.9,
+      projection: 127.4,
+      roi: 12.5,
+    },
+  ],
+  playerExposure: [
+    { player: 'Shohei Ohtani', winPct: 22.6, topPct: 11.8, cashPct: 38.2, simOwn: 34.5, projOwn: 24.1 },
+    { player: 'Aaron Judge', winPct: 19.4, topPct: 9.6, cashPct: 33.5, simOwn: 28.9, projOwn: 21.2 },
+    { player: 'Spencer Strider', winPct: 24.8, topPct: 13.5, cashPct: 46.1, simOwn: 42.3, projOwn: 36.7 },
+    { player: 'Freddie Freeman', winPct: 18.1, topPct: 8.9, cashPct: 29.4, simOwn: 26.7, projOwn: 20.5 },
+  ],
+  projectionSample: [
+    { name: 'Shohei Ohtani', team: 'LAD', pos: 'OF', fpts: 12.8, 'own%': 18.2 },
+    { name: 'Aaron Judge', team: 'NYY', pos: 'OF', fpts: 11.9, 'own%': 16.5 },
+    { name: 'Spencer Strider', team: 'ATL', pos: 'P', fpts: 25.4, 'own%': 36.7 },
+    { name: 'Freddie Freeman', team: 'LAD', pos: '1B', fpts: 10.6, 'own%': 14.8 },
+    { name: 'Jose Ramirez', team: 'CLE', pos: '3B', fpts: 10.2, 'own%': 12.4 },
+  ],
+};
+
+const fallbackStatusMessage = 'Showing interactive sample data. Connect your pipeline to view live CSV output.';
+
 const SimulationDashboard = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [sites, setSites] = useState([]);
-  const [selectedSite, setSelectedSite] = useState('');
-  const [dashboardData, setDashboardData] = useState(null);
+  const [sites, setSites] = useState(fallbackSites);
+  const [selectedSite, setSelectedSite] = useState(fallbackSites[0]);
+  const [dashboardData, setDashboardData] = useState(() => ({ ...dummyDashboardData }));
+  const [statusMessage, setStatusMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [uploadedFile, setUploadedFile] = useState(null);
@@ -87,15 +179,22 @@ const SimulationDashboard = () => {
       }
       const payload = await response.json();
       const siteList = payload.sites || [];
-      setSites(siteList);
-      if (siteList.length && !selectedSite) {
-        setSelectedSite(siteList[0]);
+
+      if (siteList.length) {
+        setSites(siteList);
+        setSelectedSite((prev) => (prev && siteList.includes(prev) ? prev : siteList[0]));
+      } else {
+        setSites(fallbackSites);
+        setSelectedSite((prev) => (prev && fallbackSites.includes(prev) ? prev : fallbackSites[0]));
+        setStatusMessage(fallbackStatusMessage);
       }
     } catch (err) {
       console.error(err);
-      setError(err.message);
+      setSites(fallbackSites);
+      setSelectedSite((prev) => (prev && fallbackSites.includes(prev) ? prev : fallbackSites[0]));
+      setStatusMessage(fallbackStatusMessage);
     }
-  }, [selectedSite]);
+  }, []);
 
   const fetchDashboard = useCallback(
     async (site) => {
@@ -110,11 +209,17 @@ const SimulationDashboard = () => {
           throw new Error('Dashboard data is not available yet. Run the CLI tools to generate CSV output.');
         }
         const payload = await response.json();
-        setDashboardData(payload);
+        if (payload && Object.keys(payload).length > 0) {
+          setDashboardData({ ...dummyDashboardData, ...payload });
+          setStatusMessage('');
+        } else {
+          setDashboardData({ ...dummyDashboardData });
+          setStatusMessage(fallbackStatusMessage);
+        }
       } catch (err) {
         console.error(err);
-        setDashboardData(null);
-        setError(err.message);
+        setDashboardData({ ...dummyDashboardData });
+        setStatusMessage(fallbackStatusMessage);
       } finally {
         setLoading(false);
       }
@@ -477,6 +582,13 @@ const SimulationDashboard = () => {
       </div>
 
       <div className="p-6 space-y-6">
+        {statusMessage && (
+          <div className="flex items-center space-x-3 bg-indigo-500/10 border border-indigo-500/20 text-indigo-200 px-4 py-3 rounded-xl">
+            <Info className="w-5 h-5" />
+            <span className="text-sm">{statusMessage}</span>
+          </div>
+        )}
+
         {/* Quick Play Tab */}
         {activeTab === 'quick-play' && (
           <div className="space-y-6">
