@@ -1,0 +1,28 @@
+{
+  "games": [
+    {
+      "team": "LAD",
+      "opponent": "SDP",
+      "implied_runs": 5.4,
+      "total": 9.0
+    },
+    {
+      "team": "SDP",
+      "opponent": "LAD",
+      "implied_runs": 4.2,
+      "total": 9.0
+    },
+    {
+      "team": "NYY",
+      "opponent": "BOS",
+      "implied_runs": 4.8,
+      "total": 8.5
+    },
+    {
+      "team": "BOS",
+      "opponent": "NYY",
+      "implied_runs": 4.3,
+      "total": 8.5
+    }
+  ]
+}

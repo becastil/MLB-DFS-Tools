@@ -1,0 +1,29 @@
+{
+  "report_date": "2025-02-11",
+  "injuries": [
+    {
+      "player_name": "Mike Trout",
+      "team": "LAA",
+      "position": "OF",
+      "injury_type": "Back",
+      "status": "IL10",
+      "injury_note": "Expected back in mid-June"
+    },
+    {
+      "player_name": "Giancarlo Stanton",
+      "team": "NYY",
+      "position": "OF",
+      "injury_type": "Hamstring",
+      "status": "OUT",
+      "injury_note": "Out indefinitely"
+    },
+    {
+      "player_name": "Xander Bogaerts",
+      "team": "SDP",
+      "position": "SS",
+      "injury_type": "Shoulder",
+      "status": "DTD",
+      "injury_note": "Game-time decision"
+    }
+  ]
+}

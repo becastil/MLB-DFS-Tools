@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from .analysis import LineupOwnershipAnalyzer
-from .projection_pipeline import ProjectionPipeline
+from .firecrawl_workflow import FirecrawlWorkflow
 
 
 def _parse_date(value: str) -> date:
@@ -83,6 +83,46 @@ def build_parser() -> argparse.ArgumentParser:
         help="Number of lineups to display in the console (0 prints all).",
     )
 
+    firecrawl_parser = subparsers.add_parser(
+        "firecrawl",
+        help="Run the Firecrawl-powered DFS data pipeline"
+    )
+    firecrawl_parser.add_argument(
+        "--slate",
+        type=Path,
+        required=True,
+        help="DraftKings salaries CSV for the slate."
+    )
+    firecrawl_parser.add_argument(
+        "--date",
+        type=_parse_date,
+        required=True,
+        help="Slate date (YYYY-MM-DD)."
+    )
+    firecrawl_parser.add_argument(
+        "--season",
+        type=int,
+        default=2024,
+        help="Season to use when fetching FanGraphs leaderboards."
+    )
+    firecrawl_parser.add_argument(
+        "--limit",
+        type=int,
+        default=30,
+        help="Number of hitters/pitchers to request from Firecrawl (default: 30)."
+    )
+    firecrawl_parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("output/firecrawl_dataset.json"),
+        help="Destination JSON file for the aggregated dataset."
+    )
+    firecrawl_parser.add_argument(
+        "--use-sample",
+        action="store_true",
+        help="Force the workflow to rely on bundled sample data instead of Firecrawl calls."
+    )
+
     return parser
 
 
@@ -90,9 +130,10 @@ def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    pipeline = ProjectionPipeline(base_dir=args.data_dir, seasons=args.seasons)
-
     if args.command == "train":
+        from .projection_pipeline import ProjectionPipeline
+
+        pipeline = ProjectionPipeline(base_dir=args.data_dir, seasons=args.seasons)
         metrics = pipeline.train(force_refresh=args.force_refresh)
         print("Training complete:")
         for model_name, metric in metrics.items():
@@ -100,6 +141,9 @@ def main(argv: list[str] | None = None) -> None:
                 f"  {model_name}: r2={metric['r2']:.3f}, RMSE={metric['rmse']:.2f}, MAE={metric['mae']:.2f}"
             )
     elif args.command == "project":
+        from .projection_pipeline import ProjectionPipeline
+
+        pipeline = ProjectionPipeline(base_dir=args.data_dir, seasons=args.seasons)
         pipeline.build_training_corpus(force_refresh=False)
         output, template_df = pipeline.generate_projections(
             args.slate, args.date, args.output, args.template_output
@@ -127,6 +171,20 @@ def main(argv: list[str] | None = None) -> None:
             display = metrics.head(top_n)
         pd.set_option("display.float_format", lambda x: f"{x:.6f}")
         print(display.to_string(index=False))
+    elif args.command == "firecrawl":
+        workflow = FirecrawlWorkflow(base_dir=args.data_dir)
+        result = workflow.run(
+            slate_csv=args.slate,
+            slate_date=args.date,
+            season=args.season,
+            limit=args.limit,
+            use_sample=args.use_sample,
+            output_path=args.output,
+        )
+        print(
+            f"Prepared Firecrawl dataset for {len(result)} players. "
+            f"Saved to {args.output}."
+        )
     else:
         parser.error("Unknown command")
 

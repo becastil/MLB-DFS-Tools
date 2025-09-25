@@ -1,0 +1,7 @@
+Position,Name + ID,Name,ID,Salary,GameInfo,TeamAbbrev,AvgPointsPerGame
+P,Tyler Glasnow (123456),Tyler Glasnow,123456,10400,LAD@SDP 07:10PM ET,LAD,19.5
+P,Gerrit Cole (234567),Gerrit Cole,234567,10200,BOS@NYY 07:05PM ET,NYY,21.3
+OF,Shohei Ohtani (345678),Shohei Ohtani,345678,6100,LAD@SDP 07:10PM ET,LAD,12.8
+SS,Mookie Betts (456789),Mookie Betts,456789,5900,LAD@SDP 07:10PM ET,LAD,13.2
+OF,Juan Soto (567890),Juan Soto,567890,5700,BOS@NYY 07:05PM ET,NYY,11.7
+3B,Rafael Devers (678901),Rafael Devers,678901,5400,BOS@NYY 07:05PM ET,BOS,10.9

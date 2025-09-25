@@ -1,0 +1,74 @@
+{
+  "hitters": [
+    {
+      "name": "Shohei Ohtani",
+      "team": "LAD",
+      "position": "OF",
+      "woba": 0.423,
+      "pa": 250,
+      "iso": 0.310,
+      "k_rate": 0.18
+    },
+    {
+      "name": "Mookie Betts",
+      "team": "LAD",
+      "position": "SS",
+      "woba": 0.388,
+      "pa": 245,
+      "iso": 0.205,
+      "k_rate": 0.13
+    },
+    {
+      "name": "Juan Soto",
+      "team": "NYY",
+      "position": "OF",
+      "woba": 0.394,
+      "pa": 240,
+      "iso": 0.245,
+      "k_rate": 0.17
+    },
+    {
+      "name": "Rafael Devers",
+      "team": "BOS",
+      "position": "3B",
+      "woba": 0.365,
+      "pa": 236,
+      "iso": 0.230,
+      "k_rate": 0.21
+    }
+  ],
+  "pitchers": [
+    {
+      "name": "Tyler Glasnow",
+      "team": "LAD",
+      "k_rate": 0.32,
+      "ip": 72.0,
+      "era": 3.45,
+      "whip": 1.05
+    },
+    {
+      "name": "Yoshinobu Yamamoto",
+      "team": "LAD",
+      "k_rate": 0.28,
+      "ip": 68.1,
+      "era": 3.20,
+      "whip": 1.10
+    },
+    {
+      "name": "Gerrit Cole",
+      "team": "NYY",
+      "k_rate": 0.30,
+      "ip": 74.2,
+      "era": 3.05,
+      "whip": 1.02
+    },
+    {
+      "name": "Luis Castillo",
+      "team": "SEA",
+      "k_rate": 0.27,
+      "ip": 70.1,
+      "era": 3.60,
+      "whip": 1.12
+    }
+  ]
+}

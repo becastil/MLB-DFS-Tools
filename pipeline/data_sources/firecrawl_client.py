@@ -5,6 +5,7 @@ Provides easy access to web data for MLB DFS analysis.
 
 import os
 import logging
+from pathlib import Path
 from typing import Dict, List, Optional, Any
 from firecrawl import FirecrawlApp
 from dotenv import load_dotenv
