@@ -40,6 +40,7 @@ import {
   Globe,
 } from 'lucide-react';
 import FirecrawlPanel from './FirecrawlPanel';
+import ModelToggle from './ModelToggle';
 
 const palette = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#f97316', '#ef4444'];
 
@@ -72,6 +73,11 @@ const SimulationDashboard = () => {
   const [workflowProgress, setWorkflowProgress] = useState([]);
   const [workflowResults, setWorkflowResults] = useState(null);
   const [showUploadInstructions, setShowUploadInstructions] = useState(false);
+  const [modelConfig, setModelConfig] = useState({
+    use_pytorch: false,
+    pytorch_blend_weight: 0.5,
+    model_type: 'ridge_baseline'
+  });
 
   const fetchSites = useCallback(async () => {
     try {
@@ -205,18 +211,24 @@ const SimulationDashboard = () => {
     setError(null);
     
     try {
-      const response = await fetch('/api/run/simulation', {
+      // Choose API endpoint based on model configuration
+      const endpoint = modelConfig.use_pytorch ? '/api/run/pytorch-simulation' : '/api/run/simulation';
+      
+      const requestBody = {
+        site: selectedSite,
+        field_size: 100,
+        num_iterations: 1000,
+        use_contest_data: false,
+        use_file_upload: false,
+        ...modelConfig // Include model configuration
+      };
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          site: selectedSite,
-          field_size: 100,
-          num_iterations: 1000,
-          use_contest_data: false,
-          use_file_upload: false,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
@@ -320,6 +332,10 @@ const SimulationDashboard = () => {
     setShowUploadInstructions(!showUploadInstructions);
   };
 
+  const handleModelChange = (newModelConfig) => {
+    setModelConfig(newModelConfig);
+  };
+
   const compositionData = useMemo(() => {
     if (!dashboardData?.compositionChart?.length) {
       return [];
@@ -385,6 +401,8 @@ const SimulationDashboard = () => {
             </div>
 
             <div className="flex items-center space-x-4">
+              <ModelToggle onModelChange={handleModelChange} />
+
               <select
                 value={selectedSite}
                 onChange={(event) => setSelectedSite(event.target.value)}
