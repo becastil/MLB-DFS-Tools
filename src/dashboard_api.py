@@ -1178,6 +1178,196 @@ async def extract_with_template(request: Dict[str, object]) -> Dict[str, object]
         raise HTTPException(status_code=500, detail=f"Failed to extract with template: {str(e)}")
 
 
+# Underdog & PrizePicks API endpoints
+@app.post("/api/extract/underdog-props")
+async def extract_underdog_props(request: Dict[str, object]) -> Dict[str, object]:
+    """Extract Underdog Fantasy prop data."""
+    try:
+        from pipeline.data_sources.firecrawl_client import get_firecrawl_client
+        
+        urls = request.get("urls", [])
+        if not urls:
+            raise HTTPException(status_code=400, detail="URLs are required")
+            
+        client = get_firecrawl_client()
+        result = client.extract_underdog_props(urls)
+        
+        return {
+            "success": True,
+            "data": result,
+            "urls": urls,
+            "type": "underdog_props"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error extracting Underdog props: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to extract Underdog props: {str(e)}")
+
+
+@app.post("/api/extract/prizepicks-props")
+async def extract_prizepicks_props(request: Dict[str, object]) -> Dict[str, object]:
+    """Extract PrizePicks prop data."""
+    try:
+        from pipeline.data_sources.firecrawl_client import get_firecrawl_client
+        
+        urls = request.get("urls", [])
+        if not urls:
+            raise HTTPException(status_code=400, detail="URLs are required")
+            
+        client = get_firecrawl_client()
+        result = client.extract_prizepicks_props(urls)
+        
+        return {
+            "success": True,
+            "data": result,
+            "urls": urls,
+            "type": "prizepicks_props"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error extracting PrizePicks props: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to extract PrizePicks props: {str(e)}")
+
+
+@app.post("/api/extract/prop-comparison")
+async def extract_prop_comparison(request: Dict[str, object]) -> Dict[str, object]:
+    """Compare prop lines across platforms."""
+    try:
+        from pipeline.data_sources.firecrawl_client import get_firecrawl_client
+        
+        underdog_urls = request.get("underdog_urls", [])
+        prizepicks_urls = request.get("prizepicks_urls", [])
+        sportsbook_urls = request.get("sportsbook_urls", [])
+        
+        if not underdog_urls and not prizepicks_urls:
+            raise HTTPException(status_code=400, detail="At least one set of URLs (Underdog or PrizePicks) is required")
+            
+        client = get_firecrawl_client()
+        result = client.extract_prop_comparison(
+            underdog_urls=underdog_urls,
+            prizepicks_urls=prizepicks_urls,
+            sportsbook_urls=sportsbook_urls if sportsbook_urls else None
+        )
+        
+        return {
+            "success": True,
+            "data": result,
+            "underdog_urls": underdog_urls,
+            "prizepicks_urls": prizepicks_urls,
+            "sportsbook_urls": sportsbook_urls,
+            "type": "prop_comparison"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error extracting prop comparison: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to extract prop comparison: {str(e)}")
+
+
+# Prop Tracking API endpoints
+@app.post("/api/prop-tracker/start")
+async def start_prop_tracking(request: Dict[str, object]) -> Dict[str, object]:
+    """Start prop tracking system."""
+    try:
+        from pipeline.prop_tracker import PropTracker
+        
+        # Global tracker instance (in production, this would be managed differently)
+        if not hasattr(app.state, 'prop_tracker'):
+            app.state.prop_tracker = PropTracker()
+        
+        interval_minutes = request.get("interval_minutes", 5)
+        
+        # Run single cycle for immediate results
+        result = await app.state.prop_tracker.run_tracking_cycle()
+        
+        return {
+            "success": True,
+            "message": "Prop tracking started",
+            "cycle_result": result,
+            "summary": app.state.prop_tracker.get_tracking_summary()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error starting prop tracking: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to start prop tracking: {str(e)}")
+
+
+@app.get("/api/prop-tracker/status")
+async def get_prop_tracker_status() -> Dict[str, object]:
+    """Get current prop tracker status."""
+    try:
+        if not hasattr(app.state, 'prop_tracker'):
+            return {
+                "active": False,
+                "message": "Prop tracker not initialized"
+            }
+        
+        summary = app.state.prop_tracker.get_tracking_summary()
+        recent_alerts = app.state.prop_tracker.get_recent_alerts(10)
+        
+        return {
+            "active": True,
+            "summary": summary,
+            "recent_alerts": [
+                {
+                    "id": alert.alert_id,
+                    "type": alert.alert_type,
+                    "level": alert.level.value,
+                    "player": alert.player_name,
+                    "stat": alert.stat_type,
+                    "message": alert.message,
+                    "timestamp": alert.timestamp.isoformat(),
+                    "processed": alert.processed
+                }
+                for alert in recent_alerts
+            ]
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting prop tracker status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get prop tracker status: {str(e)}")
+
+
+@app.post("/api/prop-tracker/run-cycle")
+async def run_prop_tracking_cycle() -> Dict[str, object]:
+    """Run a single prop tracking cycle."""
+    try:
+        from pipeline.prop_tracker import PropTracker
+        
+        if not hasattr(app.state, 'prop_tracker'):
+            app.state.prop_tracker = PropTracker()
+        
+        result = await app.state.prop_tracker.run_tracking_cycle()
+        
+        return {
+            "success": True,
+            "cycle_result": result,
+            "summary": app.state.prop_tracker.get_tracking_summary()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error running prop tracking cycle: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to run prop tracking cycle: {str(e)}")
+
+
+@app.post("/api/prop-tracker/alert/{alert_id}/mark-processed")
+async def mark_alert_processed(alert_id: str) -> Dict[str, object]:
+    """Mark an alert as processed."""
+    try:
+        if not hasattr(app.state, 'prop_tracker'):
+            raise HTTPException(status_code=404, detail="Prop tracker not initialized")
+        
+        app.state.prop_tracker.mark_alert_processed(alert_id)
+        
+        return {
+            "success": True,
+            "message": f"Alert {alert_id} marked as processed"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error marking alert as processed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to mark alert as processed: {str(e)}")
+
+
 # MLB Tools API endpoints
 @app.post("/api/run/optimizer")
 async def run_optimizer(request: Dict[str, object]) -> Dict[str, object]:

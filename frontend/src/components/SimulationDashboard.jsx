@@ -39,8 +39,10 @@ import {
   Database,
   Globe,
   Info,
+  Target,
 } from 'lucide-react';
 import FirecrawlPanel from './FirecrawlPanel';
+import PropTracker from './PropTracker';
 import ModelToggle from './ModelToggle';
 
 const palette = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#f97316', '#ef4444'];
@@ -477,7 +479,7 @@ const SimulationDashboard = () => {
               </div>
 
               <nav className="flex space-x-1">
-                {['quick-play', 'dashboard', 'simulations', 'projections', 'optimizer', 'analytics', 'web-scraper'].map((tab) => (
+                {['quick-play', 'dashboard', 'simulations', 'projections', 'optimizer', 'analytics', 'web-scraper', 'prop-tracker'].map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
@@ -496,6 +498,11 @@ const SimulationDashboard = () => {
                       <div className="flex items-center space-x-2">
                         <Zap className="w-4 h-4" />
                         <span>Quick Play</span>
+                      </div>
+                    ) : tab === 'prop-tracker' ? (
+                      <div className="flex items-center space-x-2">
+                        <Target className="w-4 h-4" />
+                        <span>Prop Tracker</span>
                       </div>
                     ) : (
                       tab
@@ -764,6 +771,11 @@ const SimulationDashboard = () => {
         {/* Web Scraper Tab */}
         {activeTab === 'web-scraper' && (
           <FirecrawlPanel />
+        )}
+
+        {/* Prop Tracker Tab */}
+        {activeTab === 'prop-tracker' && (
+          <PropTracker />
         )}
 
         {/* Optimizer Tab */}

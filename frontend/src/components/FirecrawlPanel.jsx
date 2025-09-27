@@ -287,6 +287,40 @@ const FirecrawlPanel = () => {
     }
   };
 
+  // Prop Tools handlers
+  const handleUnderdogProps = () => {
+    const validUrls = urls.filter(u => u.trim());
+    if (validUrls.length === 0) {
+      setError('Please enter at least one Underdog URL');
+      return;
+    }
+    handleScrape('/api/extract/underdog-props', { urls: validUrls });
+  };
+
+  const handlePrizePicksProps = () => {
+    const validUrls = urls.filter(u => u.trim());
+    if (validUrls.length === 0) {
+      setError('Please enter at least one PrizePicks URL');
+      return;
+    }
+    handleScrape('/api/extract/prizepicks-props', { urls: validUrls });
+  };
+
+  const handlePropComparison = () => {
+    const underdogUrls = urls.slice(0, Math.ceil(urls.length / 2)).filter(u => u.trim());
+    const prizePicksUrls = urls.slice(Math.ceil(urls.length / 2)).filter(u => u.trim());
+    
+    if (underdogUrls.length === 0 && prizePicksUrls.length === 0) {
+      setError('Please enter URLs for comparison');
+      return;
+    }
+    
+    handleScrape('/api/extract/prop-comparison', {
+      underdog_urls: underdogUrls,
+      prizepicks_urls: prizePicksUrls
+    });
+  };
+
   const formatResult = (data) => {
     if (!data) return null;
     
@@ -314,7 +348,8 @@ const FirecrawlPanel = () => {
           { id: 'bulk', label: 'Bulk Scrape', icon: Activity },
           { id: 'crawl', label: 'Site Crawl', icon: Cloud },
           { id: 'extract', label: 'AI Extract', icon: Zap },
-          { id: 'templates', label: 'MLB Templates', icon: Cpu }
+          { id: 'templates', label: 'MLB Templates', icon: Cpu },
+          { id: 'props', label: 'Prop Tools', icon: Activity }
         ].map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -728,6 +763,149 @@ const FirecrawlPanel = () => {
         </div>
       )}
 
+      {/* Prop Tools Tab */}
+      {activeTab === 'props' && (
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/30 rounded-lg p-4">
+            <h3 className="text-purple-200 font-medium mb-2 flex items-center">
+              <Activity className="w-5 h-5 mr-2" />
+              Prop Betting Tools
+            </h3>
+            <p className="text-sm text-purple-200/80">
+              Extract and compare prop lines from Underdog Fantasy, PrizePicks, and sportsbooks to find +EV opportunities.
+            </p>
+          </div>
+
+          {/* URLs Section */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Platform URLs
+            </label>
+            <div className="space-y-3">
+              {urls.map((url, index) => (
+                <div key={index} className="flex space-x-2">
+                  <input
+                    type="url"
+                    value={url}
+                    onChange={(e) => updateUrl(index, e.target.value)}
+                    placeholder={
+                      index < Math.ceil(urls.length / 2)
+                        ? `Underdog URL ${index + 1} (e.g., https://underdogfantasy.com/picks/mlb)`
+                        : `PrizePicks URL ${index + 1 - Math.ceil(urls.length / 2)} (e.g., https://prizepicks.com/board/MLB)`
+                    }
+                    className="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                  />
+                  {urls.length > 1 && (
+                    <button
+                      onClick={() => removeUrl(index)}
+                      className="px-3 py-3 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={addUrlField}
+              className="mt-3 px-4 py-2 bg-white/5 text-gray-300 rounded-lg hover:bg-white/10 transition-colors"
+            >
+              + Add URL
+            </button>
+            <p className="mt-2 text-sm text-gray-400">
+              💡 First half of URLs for Underdog, second half for PrizePicks when comparing
+            </p>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <button
+              onClick={handleUnderdogProps}
+              disabled={loading}
+              className="flex items-center justify-center space-x-2 px-4 py-3 bg-purple-500 hover:bg-purple-600 disabled:opacity-50 text-white rounded-lg transition-colors"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Activity className="w-4 h-4" />}
+              <span>Extract Underdog</span>
+            </button>
+
+            <button
+              onClick={handlePrizePicksProps}
+              disabled={loading}
+              className="flex items-center justify-center space-x-2 px-4 py-3 bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white rounded-lg transition-colors"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Activity className="w-4 h-4" />}
+              <span>Extract PrizePicks</span>
+            </button>
+
+            <button
+              onClick={handlePropComparison}
+              disabled={loading}
+              className="flex items-center justify-center space-x-2 px-4 py-3 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-lg transition-colors"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+              <span>Compare Lines</span>
+            </button>
+          </div>
+
+          {/* Feature Highlights */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-white/5 border border-white/10 rounded-lg p-4">
+              <h4 className="text-white font-medium mb-2 flex items-center">
+                <Activity className="w-4 h-4 mr-2 text-purple-400" />
+                Underdog Features
+              </h4>
+              <ul className="text-sm text-gray-300 space-y-1">
+                <li>• Extract prop multipliers and lines</li>
+                <li>• Pick percentages and popularity</li>
+                <li>• Value grades (A-F ratings)</li>
+                <li>• Best Ball ADP data</li>
+                <li>• Recent form analysis</li>
+              </ul>
+            </div>
+
+            <div className="bg-white/5 border border-white/10 rounded-lg p-4">
+              <h4 className="text-white font-medium mb-2 flex items-center">
+                <Activity className="w-4 h-4 mr-2 text-green-400" />
+                PrizePicks Features
+              </h4>
+              <ul className="text-sm text-gray-300 space-y-1">
+                <li>• Prop lines and odds</li>
+                <li>• Payout multipliers</li>
+                <li>• Trending picks data</li>
+                <li>• Sharp vs public action</li>
+                <li>• Weather impact analysis</li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Comparison Features */}
+          <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-4">
+            <h4 className="text-orange-200 font-medium mb-2 flex items-center">
+              <Zap className="w-4 h-4 mr-2" />
+              Line Comparison Benefits
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-orange-200/80">
+              <div>
+                <p className="font-medium mb-1">Find +EV Opportunities:</p>
+                <ul className="space-y-1">
+                  <li>• Identify line discrepancies</li>
+                  <li>• Spot arbitrage opportunities</li>
+                  <li>• Calculate expected value</li>
+                </ul>
+              </div>
+              <div>
+                <p className="font-medium mb-1">Market Intelligence:</p>
+                <ul className="space-y-1">
+                  <li>• Compare platform tendencies</li>
+                  <li>• Track sharp money moves</li>
+                  <li>• Optimize platform selection</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Job Status Display */}
       {jobId && jobStatus && (
         <div className="mt-6 bg-purple-500/10 border border-purple-500/30 rounded-lg p-4">
@@ -819,6 +997,7 @@ const FirecrawlPanel = () => {
           <li>• <strong>Site Crawl:</strong> Discover and scrape entire websites</li>
           <li>• <strong>AI Extract:</strong> Use LLMs to intelligently extract structured data</li>
           <li>• <strong>MLB Templates:</strong> Pre-built schemas for common MLB data types</li>
+          <li>• <strong>Prop Tools:</strong> Extract and compare Underdog/PrizePicks props for +EV opportunities</li>
         </ul>
       </div>
     </div>

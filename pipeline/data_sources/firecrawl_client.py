@@ -811,3 +811,223 @@ def extract_dfs_contextual_data(urls: list[str], api_key: str = None) -> dict:
     )
     
     return data
+
+    # ------------------------------------------------------------------
+    # Underdog Fantasy & PrizePicks Extraction Methods  
+    # ------------------------------------------------------------------
+    
+    def extract_underdog_props(self, urls: List[str]) -> Dict[str, Any]:
+        """
+        Extract Underdog Fantasy prop bets and multipliers.
+        
+        Args:
+            urls: URLs containing Underdog Fantasy prop data
+        
+        Returns:
+            Dict containing Underdog prop information
+        """
+        schema = {
+            "type": "object",
+            "properties": {
+                "extraction_date": {"type": "string"},
+                "props": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "player_name": {"type": "string"},
+                            "team": {"type": "string"},
+                            "position": {"type": "string"},
+                            "stat_type": {"type": "string"},
+                            "line": {"type": "number"},
+                            "over_multiplier": {"type": "number"},
+                            "under_multiplier": {"type": "number"},
+                            "higher_multiplier": {"type": "number"},
+                            "lower_multiplier": {"type": "number"},
+                            "pick_percentage": {"type": "number"},
+                            "value_grade": {"type": "string"},
+                            "last_10_games": {"type": "string"},
+                            "season_average": {"type": "number"},
+                            "matchup_rating": {"type": "string"}
+                        }
+                    }
+                },
+                "best_ball_adp": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "player_name": {"type": "string"},
+                            "position": {"type": "string"},
+                            "team": {"type": "string"},
+                            "adp": {"type": "number"},
+                            "draft_percentage": {"type": "number"},
+                            "tier": {"type": "string"}
+                        }
+                    }
+                }
+            }
+        }
+        
+        prompt = """Extract Underdog Fantasy data including:
+        1. All available prop bets with player names, stat types, and lines
+        2. Over/Under multipliers and Higher/Lower multipliers
+        3. Pick percentages and popularity metrics
+        4. Player value grades (A, B, C, D, F ratings)
+        5. Recent form data (last 10 games performance vs line)
+        6. Season averages for each stat type
+        7. Matchup difficulty ratings
+        8. Best Ball ADP data if available
+        9. Draft percentages and player tiers
+        
+        Focus on MLB players and props only."""
+        
+        return self.extract(
+            urls=urls,
+            prompt=prompt,
+            schema=schema,
+            enable_web_search=True
+        )
+    
+    def extract_prizepicks_props(self, urls: List[str]) -> Dict[str, Any]:
+        """
+        Extract PrizePicks prop lines and data.
+        
+        Args:
+            urls: URLs containing PrizePicks prop data
+        
+        Returns:
+            Dict containing PrizePicks prop information
+        """
+        schema = {
+            "type": "object",
+            "properties": {
+                "extraction_date": {"type": "string"},
+                "props": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "player_name": {"type": "string"},
+                            "team": {"type": "string"},
+                            "position": {"type": "string"},
+                            "stat_type": {"type": "string"},
+                            "line": {"type": "number"},
+                            "pick_type": {"type": "string"},
+                            "odds": {"type": "number"},
+                            "payout_multiplier": {"type": "number"},
+                            "popularity": {"type": "number"},
+                            "recent_form": {"type": "string"},
+                            "injury_status": {"type": "string"},
+                            "weather_impact": {"type": "string"},
+                            "ballpark_factor": {"type": "string"}
+                        }
+                    }
+                },
+                "trending_picks": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "player_name": {"type": "string"},
+                            "stat_type": {"type": "string"},
+                            "pick_percentage": {"type": "number"},
+                            "sharp_action": {"type": "string"}
+                        }
+                    }
+                }
+            }
+        }
+        
+        prompt = """Extract PrizePicks MLB prop data including:
+        1. All available MLB prop bets with player names and stat types
+        2. Prop lines and pick types (Over/Under, More/Less)
+        3. Odds and payout multipliers for different bet types
+        4. Pick popularity and trending data
+        5. Recent player form vs the line (hits, strikeouts over last 5-10 games)
+        6. Injury status updates affecting props
+        7. Weather conditions and ballpark factors
+        8. Sharp vs public action indicators
+        9. Line movement data if available
+        
+        Focus specifically on MLB players and exclude other sports."""
+        
+        return self.extract(
+            urls=urls,
+            prompt=prompt,
+            schema=schema,
+            enable_web_search=True
+        )
+    
+    def extract_prop_comparison(self, underdog_urls: List[str], prizepicks_urls: List[str], 
+                               sportsbook_urls: List[str] = None) -> Dict[str, Any]:
+        """
+        Compare prop lines across Underdog, PrizePicks, and sportsbooks.
+        
+        Args:
+            underdog_urls: Underdog Fantasy URLs
+            prizepicks_urls: PrizePicks URLs  
+            sportsbook_urls: Optional sportsbook URLs for comparison
+        
+        Returns:
+            Dict containing cross-platform prop comparison
+        """
+        all_urls = underdog_urls + prizepicks_urls + (sportsbook_urls or [])
+        
+        schema = {
+            "type": "object",
+            "properties": {
+                "comparison_date": {"type": "string"},
+                "prop_arbitrage": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "player_name": {"type": "string"},
+                            "stat_type": {"type": "string"},
+                            "underdog_line": {"type": "number"},
+                            "underdog_multiplier": {"type": "number"},
+                            "prizepicks_line": {"type": "number"},
+                            "prizepicks_odds": {"type": "number"},
+                            "sportsbook_line": {"type": "number"},
+                            "sportsbook_odds": {"type": "number"},
+                            "edge_opportunity": {"type": "string"},
+                            "recommended_side": {"type": "string"},
+                            "confidence_level": {"type": "string"}
+                        }
+                    }
+                },
+                "market_inefficiencies": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "player_name": {"type": "string"},
+                            "stat_type": {"type": "string"},
+                            "line_discrepancy": {"type": "number"},
+                            "best_platform": {"type": "string"},
+                            "expected_value": {"type": "number"}
+                        }
+                    }
+                }
+            }
+        }
+        
+        prompt = """Compare MLB prop lines across platforms to identify:
+        1. Line discrepancies between Underdog, PrizePicks, and sportsbooks
+        2. Arbitrage opportunities where you can bet both sides profitably
+        3. Market inefficiencies and soft lines
+        4. Best platforms for specific types of props
+        5. Expected value calculations for each prop
+        6. Sharp vs recreational platform tendencies
+        7. Recommended sides based on line shopping
+        8. Confidence levels for each edge opportunity
+        
+        Focus on finding +EV (positive expected value) opportunities for MLB props."""
+        
+        return self.extract(
+            urls=all_urls,
+            prompt=prompt,
+            schema=schema,
+            enable_web_search=True
+        )
