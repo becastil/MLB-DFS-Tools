@@ -5,7 +5,7 @@ existing optimizers/simulators so that the React dashboard can visualise it
 without relying on mocked values.  The API aggregates data from the CSV files
 that the tooling already produces (projections, optimizer exports and GPP
 simulation summaries) and exposes a small JSON schema that the front-end can
-consume.
+consume to display the data.
 
 Run with::
 
