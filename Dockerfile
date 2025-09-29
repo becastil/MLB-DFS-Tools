@@ -15,7 +15,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 2: Setup Python backend with frontend
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 # Install Node.js for any runtime needs
 RUN apt-get update && apt-get install -y \
