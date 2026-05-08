@@ -30,7 +30,7 @@ Run these commands in a terminal, step by step.
 
 1. **Clone the repo and open it**
    ```bash
-   git clone https://github.com/your-name/MLB-DFS-Tools.git
+   git clone https://github.com/becastil/MLB-DFS-Tools.git
    cd MLB-DFS-Tools
    ```
 
